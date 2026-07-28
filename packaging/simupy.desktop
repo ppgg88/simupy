@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=SimuPy
+GenericName=Block-diagram simulator
+Comment=Block-diagram simulation with custom blocks written in Python
+Exec=simupy %f
+Icon=simupy
+Terminal=false
+Categories=Science;Engineering;Development;
+MimeType=application/x-simupy-model;

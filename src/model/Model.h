@@ -1,0 +1,146 @@
+#pragma once
+
+#include "Block.h"
+
+#include <limits>
+#include <map>
+#include <memory>
+#include <string>
+#include <vector>
+
+namespace simupy {
+
+struct Connection {
+    std::string id;
+    std::string sourceBlock;
+    int sourcePort = 0;
+    std::string targetBlock;
+    int targetPort = 0;
+    std::vector<std::pair<double, double>> waypoints;
+};
+
+struct BlockGeometry {
+    double x = 0.0;
+    double y = 0.0;
+    double width = 80.0;
+    double height = 60.0;
+    int rotation = 0;        ///< degrees, multiples of 90
+    bool mirrored = false;   ///< flip left/right
+};
+
+struct SolverSettings {
+    enum class Method {
+        Euler,        ///< fixed step, 1st order
+        Heun,         ///< fixed step, 2nd order
+        RK4,          ///< fixed step, 4th order
+        RK45,         ///< variable step Dormand-Prince 5(4)
+        SDIRK2,       ///< variable step, implicit and L-stable, for stiff models
+        DiscreteOnly  ///< no continuous states, advance by fixedStep
+    };
+
+    Method method = Method::RK45;
+    double startTime = 0.0;
+    double stopTime = 10.0;
+    double fixedStep = 0.001;
+    /// Upper bound on a single solver step. 0 selects an automatic value.
+    ///
+    /// The automatic bound is deliberately tighter than accuracy alone would
+    /// require: one accepted step produces one logged sample, so this also
+    /// sets the floor on how smooth a plotted curve can be.
+    double maxStep = 0.0;
+    double minStep = 1e-12;
+    double initialStep = 0.0;  ///< 0 => chosen automatically
+    double relTol = 1e-4;
+    double absTol = 1e-7;
+
+    bool detectZeroCrossings = true;
+
+    int maxLoopIterations = 100;
+    double loopTolerance = 1e-9;
+
+    int maxLoggedSamples = 200000;
+
+    bool realTime = false;
+
+    double realTimeFactor = 1.0;
+
+    bool unbounded = false;
+
+    double effectiveStopTime() const {
+        return unbounded ? std::numeric_limits<double>::infinity() : stopTime;
+    }
+
+    double effectiveMaxStep() const {
+        if (maxStep > 0.0) return maxStep;
+        if (unbounded) return kUnboundedMaxStep;
+        return (stopTime - startTime) / 200.0;
+    }
+
+    static constexpr double kUnboundedMaxStep = 0.05;
+
+    static const char* methodName(Method m);
+    static Method methodFromName(const std::string& name);
+};
+
+class Model {
+public:
+    Model() = default;
+    Model(const Model&) = delete;
+    Model& operator=(const Model&) = delete;
+
+    Block* addBlock(BlockPtr block, BlockGeometry geometry = {});
+
+    Block* addBlock(const std::string& typeName, double x, double y);
+
+    void removeBlock(const std::string& blockId);
+
+    Block* block(const std::string& blockId);
+    const Block* block(const std::string& blockId) const;
+
+    const std::vector<BlockPtr>& blocks() const { return blocks_; }
+
+    BlockGeometry& geometry(const std::string& blockId);
+    const BlockGeometry& geometry(const std::string& blockId) const;
+
+    bool isNameAvailable(const std::string& name,
+                         const std::string& exceptId = {}) const;
+    std::string uniqueName(const std::string& base,
+                           const std::string& exceptId = {}) const;
+
+    const Connection& connect(const std::string& sourceBlock, int sourcePort,
+                              const std::string& targetBlock, int targetPort);
+
+    void disconnect(const std::string& connectionId);
+
+    void disconnectInput(const std::string& targetBlock, int targetPort);
+
+    const std::vector<Connection>& connections() const { return connections_; }
+
+    const Connection* incoming(const std::string& blockId, int port) const;
+
+    void pruneDanglingConnections();
+
+    SolverSettings& solver() { return solver_; }
+    const SolverSettings& solver() const { return solver_; }
+
+    const std::string& name() const { return name_; }
+    void setName(std::string v) { name_ = std::move(v); }
+
+    const std::string& initScript() const { return initScript_; }
+    void setInitScript(std::string v) { initScript_ = std::move(v); }
+
+    void clear();
+
+private:
+    std::string allocateId(const std::string& prefix);
+
+    std::vector<BlockPtr> blocks_;
+    std::map<std::string, BlockGeometry> geometry_;
+    std::vector<Connection> connections_;
+    SolverSettings solver_;
+    std::string name_ = "untitled";
+    std::string initScript_;
+    int idCounter_ = 0;
+};
+
+}  // namespace simupy

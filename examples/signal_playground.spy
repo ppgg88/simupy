@@ -1,0 +1,220 @@
+{
+  "format": "simupy-model",
+  "version": 1,
+  "name": "signal playground",
+  "solver": {
+    "method": "rk45",
+    "startTime": 0.0,
+    "stopTime": 5.0,
+    "fixedStep": 0.001,
+    "maxStep": 0.0,
+    "minStep": 1e-12,
+    "initialStep": 0.0,
+    "relTol": 0.0001,
+    "absTol": 1e-07,
+    "maxLoggedSamples": 200000
+  },
+  "blocks": [
+    {
+      "id": "sine",
+      "type": "Sine",
+      "name": "Sine",
+      "geometry": {
+        "x": -420,
+        "y": -120,
+        "width": 80,
+        "height": 60,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "amplitude": [
+          1.0
+        ],
+        "frequency": 3.0,
+        "frequencyUnit": "rad/s",
+        "phase": 0.0,
+        "bias": [
+          0.0
+        ]
+      }
+    },
+    {
+      "id": "pulse",
+      "type": "Pulse",
+      "name": "Pulse",
+      "geometry": {
+        "x": -420,
+        "y": 20,
+        "width": 80,
+        "height": 60,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "amplitude": 1.0,
+        "period": 1.0,
+        "dutyCycle": 40.0,
+        "phaseDelay": 0.0
+      }
+    },
+    {
+      "id": "chirp",
+      "type": "Chirp",
+      "name": "Chirp",
+      "geometry": {
+        "x": -420,
+        "y": 160,
+        "width": 80,
+        "height": 60,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "amplitude": 1.0,
+        "startFrequency": 0.2,
+        "endFrequency": 4.0,
+        "sweepTime": 5.0
+      }
+    },
+    {
+      "id": "sat",
+      "type": "Saturation",
+      "name": "Saturation",
+      "geometry": {
+        "x": -240,
+        "y": 20,
+        "width": 80,
+        "height": 60,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "upperLimit": 0.6,
+        "lowerLimit": -0.6
+      }
+    },
+    {
+      "id": "filter",
+      "type": "TransferFcn",
+      "name": "Low-pass",
+      "geometry": {
+        "x": -240,
+        "y": 160,
+        "width": 120,
+        "height": 60,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "numerator": [
+          1.0
+        ],
+        "denominator": [
+          0.15,
+          1.0
+        ]
+      }
+    },
+    {
+      "id": "mux",
+      "type": "Mux",
+      "name": "Mux",
+      "geometry": {
+        "x": -40,
+        "y": 0,
+        "width": 24,
+        "height": 110,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "inputs": 3.0
+      }
+    },
+    {
+      "id": "scope",
+      "type": "Scope",
+      "name": "Signals",
+      "geometry": {
+        "x": 80,
+        "y": 20,
+        "width": 80,
+        "height": 60,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "inputs": 1.0
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "wire_1",
+      "source": {
+        "block": "sine",
+        "port": 0
+      },
+      "target": {
+        "block": "mux",
+        "port": 0
+      }
+    },
+    {
+      "id": "wire_2",
+      "source": {
+        "block": "pulse",
+        "port": 0
+      },
+      "target": {
+        "block": "sat",
+        "port": 0
+      }
+    },
+    {
+      "id": "wire_3",
+      "source": {
+        "block": "sat",
+        "port": 0
+      },
+      "target": {
+        "block": "mux",
+        "port": 1
+      }
+    },
+    {
+      "id": "wire_4",
+      "source": {
+        "block": "chirp",
+        "port": 0
+      },
+      "target": {
+        "block": "filter",
+        "port": 0
+      }
+    },
+    {
+      "id": "wire_5",
+      "source": {
+        "block": "filter",
+        "port": 0
+      },
+      "target": {
+        "block": "mux",
+        "port": 2
+      }
+    },
+    {
+      "id": "wire_6",
+      "source": {
+        "block": "mux",
+        "port": 0
+      },
+      "target": {
+        "block": "scope",
+        "port": 0
+      }
+    }
+  ]
+}

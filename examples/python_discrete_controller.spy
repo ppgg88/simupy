@@ -1,0 +1,210 @@
+{
+  "format": "simupy-model",
+  "version": 1,
+  "name": "python discrete controller",
+  "solver": {
+    "method": "rk45",
+    "startTime": 0.0,
+    "stopTime": 6.0,
+    "fixedStep": 0.001,
+    "maxStep": 0.0,
+    "minStep": 1e-12,
+    "initialStep": 0.0,
+    "relTol": 1e-08,
+    "absTol": 1e-07,
+    "maxLoggedSamples": 200000
+  },
+  "blocks": [
+    {
+      "id": "setpoint",
+      "type": "Step",
+      "name": "Setpoint",
+      "geometry": {
+        "x": -460,
+        "y": 0,
+        "width": 80,
+        "height": 60,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "stepTime": 0.5,
+        "initialValue": [
+          0.0
+        ],
+        "finalValue": [
+          1.0
+        ]
+      }
+    },
+    {
+      "id": "ctrl",
+      "type": "PythonFunction",
+      "name": "PI (Python)",
+      "geometry": {
+        "x": -280,
+        "y": 0,
+        "width": 120,
+        "height": 70,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "code": "import numpy as np\nfrom simupy import Block\n\n\nclass DiscretePI(Block):\n    \"\"\"A velocity-form PI controller with clamping, sampled at 50 Hz.\"\"\"\n\n    inputs = [\"setpoint\", \"measurement\"]\n    outputs = [\"command\"]\n    discrete_states = 1          # the accumulated integral term\n    sample_time = 0.02\n    direct_feedthrough = True\n\n    def setup(self, widths):\n        self.kp = self.params.get(\"kp\", 3.0)\n        self.ki = self.params.get(\"ki\", 8.0)\n        self.limit = self.params.get(\"limit\", 5.0)\n        return 1\n\n    def output(self, t, u):\n        error = u[0][0] - u[1][0]\n        command = self.kp * error + self.xd[0]\n        return np.clip(command, -self.limit, self.limit)\n\n    def update(self, t, u):\n        error = u[0][0] - u[1][0]\n        integral = self.xd[0] + self.ki * self.sample_time * error\n\n        # Stop winding up once the command is pinned against a limit.\n        command = self.kp * error + integral\n        if abs(command) > self.limit and command * error > 0:\n            integral = self.xd[0]\n\n        return [integral]\n",
+        "className": "DiscretePI",
+        "parameters": "kp = 3.0\nki = 8.0\nlimit = 5.0"
+      }
+    },
+    {
+      "id": "plant",
+      "type": "TransferFcn",
+      "name": "Motor",
+      "geometry": {
+        "x": -80,
+        "y": 0,
+        "width": 130,
+        "height": 60,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "numerator": [
+          1.0
+        ],
+        "denominator": [
+          0.5,
+          1.0
+        ]
+      }
+    },
+    {
+      "id": "mux",
+      "type": "Mux",
+      "name": "Mux",
+      "geometry": {
+        "x": 120,
+        "y": 10,
+        "width": 24,
+        "height": 80,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "inputs": 2.0
+      }
+    },
+    {
+      "id": "scope",
+      "type": "Scope",
+      "name": "Tracking",
+      "geometry": {
+        "x": 220,
+        "y": 10,
+        "width": 80,
+        "height": 60,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "inputs": 1.0
+      }
+    },
+    {
+      "id": "feedback",
+      "type": "Gain",
+      "name": "Encoder",
+      "geometry": {
+        "x": -100,
+        "y": 190,
+        "width": 70,
+        "height": 50,
+        "rotation": 0,
+        "mirrored": true
+      },
+      "params": {
+        "gain": [
+          1.0
+        ]
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "wire_1",
+      "source": {
+        "block": "setpoint",
+        "port": 0
+      },
+      "target": {
+        "block": "ctrl",
+        "port": 0
+      }
+    },
+    {
+      "id": "wire_2",
+      "source": {
+        "block": "feedback",
+        "port": 0
+      },
+      "target": {
+        "block": "ctrl",
+        "port": 1
+      }
+    },
+    {
+      "id": "wire_3",
+      "source": {
+        "block": "ctrl",
+        "port": 0
+      },
+      "target": {
+        "block": "plant",
+        "port": 0
+      }
+    },
+    {
+      "id": "wire_4",
+      "source": {
+        "block": "plant",
+        "port": 0
+      },
+      "target": {
+        "block": "feedback",
+        "port": 0
+      }
+    },
+    {
+      "id": "wire_5",
+      "source": {
+        "block": "plant",
+        "port": 0
+      },
+      "target": {
+        "block": "mux",
+        "port": 0
+      }
+    },
+    {
+      "id": "wire_6",
+      "source": {
+        "block": "setpoint",
+        "port": 0
+      },
+      "target": {
+        "block": "mux",
+        "port": 1
+      }
+    },
+    {
+      "id": "wire_7",
+      "source": {
+        "block": "mux",
+        "port": 0
+      },
+      "target": {
+        "block": "scope",
+        "port": 0
+      }
+    }
+  ]
+}

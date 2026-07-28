@@ -1,0 +1,14 @@
+build/
+build-*/
+install/
+_CPack_Packages/
+*.deb
+*.tar.gz
+*.zip
+compile_commands.json
+.cache/
+__pycache__/
+*.pyc
+*.spy.bak
+simupy_output.csv
+.claude/
