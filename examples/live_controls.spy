@@ -1,0 +1,322 @@
+{
+  "format": "simupy-model",
+  "version": 1,
+  "name": "live controls",
+  "solver": {
+    "method": "rk45",
+    "startTime": 0.0,
+    "stopTime": 30.0,
+    "fixedStep": 0.001,
+    "maxStep": 0.02,
+    "minStep": 1e-12,
+    "initialStep": 0.0,
+    "relTol": 0.0001,
+    "absTol": 1e-07,
+    "maxLoggedSamples": 200000,
+    "realTime": true,
+    "realTimeFactor": 1.0
+  },
+  "blocks": [
+    {
+      "id": "setpoint",
+      "type": "Slider",
+      "name": "Setpoint",
+      "geometry": {
+        "x": -560,
+        "y": 0,
+        "width": 100,
+        "height": 55,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "minimum": -2.0,
+        "maximum": 2.0,
+        "value": 1.0,
+        "step": 0.05
+      },
+      "signals": {
+        "0": "setpoint"
+      }
+    },
+    {
+      "id": "enable",
+      "type": "Toggle",
+      "name": "Integral action",
+      "geometry": {
+        "x": -560,
+        "y": 150,
+        "width": 100,
+        "height": 55,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "on": true,
+        "offValue": 0.0,
+        "onValue": 1.0
+      }
+    },
+    {
+      "id": "kick",
+      "type": "PushButton",
+      "name": "Disturbance",
+      "geometry": {
+        "x": -560,
+        "y": 300,
+        "width": 100,
+        "height": 55,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "offValue": 0.0,
+        "onValue": 0.6
+      }
+    },
+    {
+      "id": "error",
+      "type": "Sum",
+      "name": "Error",
+      "geometry": {
+        "x": -380,
+        "y": 0,
+        "width": 50,
+        "height": 60,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "signs": "+-"
+      }
+    },
+    {
+      "id": "pid",
+      "type": "PID",
+      "name": "Controller",
+      "geometry": {
+        "x": -280,
+        "y": 0,
+        "width": 90,
+        "height": 60,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "kp": 3.0,
+        "ki": 2.0,
+        "kd": 0.2
+      }
+    },
+    {
+      "id": "gate",
+      "type": "Product",
+      "name": "Gate",
+      "geometry": {
+        "x": -150,
+        "y": 0,
+        "width": 50,
+        "height": 60,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "inputs": 2.0
+      }
+    },
+    {
+      "id": "inject",
+      "type": "Sum",
+      "name": "Injected",
+      "geometry": {
+        "x": -50,
+        "y": 0,
+        "width": 50,
+        "height": 60,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "signs": "++"
+      }
+    },
+    {
+      "id": "plant",
+      "type": "TransferFcn",
+      "name": "Plant",
+      "geometry": {
+        "x": 60,
+        "y": 0,
+        "width": 120,
+        "height": 60,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "numerator": [
+          1.0
+        ],
+        "denominator": [
+          1.0,
+          1.0
+        ]
+      },
+      "signals": {
+        "0": "output"
+      }
+    },
+    {
+      "id": "mux",
+      "type": "Mux",
+      "name": "Mux",
+      "geometry": {
+        "x": 240,
+        "y": 0,
+        "width": 24,
+        "height": 90,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "inputs": 2.0
+      }
+    },
+    {
+      "id": "scope",
+      "type": "Scope",
+      "name": "Tracking",
+      "geometry": {
+        "x": 320,
+        "y": 0,
+        "width": 80,
+        "height": 60,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {}
+    }
+  ],
+  "connections": [
+    {
+      "id": "wire_1",
+      "source": {
+        "block": "setpoint",
+        "port": 0
+      },
+      "target": {
+        "block": "error",
+        "port": 0
+      }
+    },
+    {
+      "id": "wire_2",
+      "source": {
+        "block": "plant",
+        "port": 0
+      },
+      "target": {
+        "block": "error",
+        "port": 1
+      }
+    },
+    {
+      "id": "wire_3",
+      "source": {
+        "block": "error",
+        "port": 0
+      },
+      "target": {
+        "block": "pid",
+        "port": 0
+      }
+    },
+    {
+      "id": "wire_4",
+      "source": {
+        "block": "pid",
+        "port": 0
+      },
+      "target": {
+        "block": "gate",
+        "port": 0
+      }
+    },
+    {
+      "id": "wire_5",
+      "source": {
+        "block": "enable",
+        "port": 0
+      },
+      "target": {
+        "block": "gate",
+        "port": 1
+      }
+    },
+    {
+      "id": "wire_6",
+      "source": {
+        "block": "gate",
+        "port": 0
+      },
+      "target": {
+        "block": "inject",
+        "port": 0
+      }
+    },
+    {
+      "id": "wire_7",
+      "source": {
+        "block": "kick",
+        "port": 0
+      },
+      "target": {
+        "block": "inject",
+        "port": 1
+      }
+    },
+    {
+      "id": "wire_8",
+      "source": {
+        "block": "inject",
+        "port": 0
+      },
+      "target": {
+        "block": "plant",
+        "port": 0
+      }
+    },
+    {
+      "id": "wire_9",
+      "source": {
+        "block": "setpoint",
+        "port": 0
+      },
+      "target": {
+        "block": "mux",
+        "port": 0
+      }
+    },
+    {
+      "id": "wire_10",
+      "source": {
+        "block": "plant",
+        "port": 0
+      },
+      "target": {
+        "block": "mux",
+        "port": 1
+      }
+    },
+    {
+      "id": "wire_11",
+      "source": {
+        "block": "mux",
+        "port": 0
+      },
+      "target": {
+        "block": "scope",
+        "port": 0
+      }
+    }
+  ]
+}

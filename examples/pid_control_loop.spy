@@ -1,0 +1,242 @@
+{
+  "format": "simupy-model",
+  "version": 1,
+  "name": "pid control loop",
+  "solver": {
+    "method": "rk45",
+    "startTime": 0.0,
+    "stopTime": 8.0,
+    "fixedStep": 0.001,
+    "maxStep": 0.0,
+    "minStep": 1e-12,
+    "initialStep": 0.0,
+    "relTol": 1e-06,
+    "absTol": 1e-07,
+    "maxLoggedSamples": 200000
+  },
+  "blocks": [
+    {
+      "id": "setpoint",
+      "type": "Step",
+      "name": "Setpoint",
+      "geometry": {
+        "x": -420,
+        "y": 0,
+        "width": 80,
+        "height": 60,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "stepTime": 0.5,
+        "initialValue": [
+          0.0
+        ],
+        "finalValue": [
+          1.0
+        ]
+      }
+    },
+    {
+      "id": "error",
+      "type": "Sum",
+      "name": "Error",
+      "geometry": {
+        "x": -260,
+        "y": 10,
+        "width": 60,
+        "height": 60,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "signs": "+-"
+      }
+    },
+    {
+      "id": "pid",
+      "type": "PID",
+      "name": "Controller",
+      "geometry": {
+        "x": -140,
+        "y": 0,
+        "width": 80,
+        "height": 60,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "P": 4.0,
+        "I": 6.0,
+        "D": 0.4,
+        "N": 50.0,
+        "limitOutput": true,
+        "upperLimit": 8.0,
+        "lowerLimit": -8.0
+      }
+    },
+    {
+      "id": "plant",
+      "type": "TransferFcn",
+      "name": "Plant",
+      "geometry": {
+        "x": 20,
+        "y": 0,
+        "width": 130,
+        "height": 60,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "numerator": [
+          2.0
+        ],
+        "denominator": [
+          1.0,
+          3.0,
+          2.0
+        ]
+      }
+    },
+    {
+      "id": "mux",
+      "type": "Mux",
+      "name": "Mux",
+      "geometry": {
+        "x": 220,
+        "y": 10,
+        "width": 24,
+        "height": 80,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "inputs": 2.0
+      }
+    },
+    {
+      "id": "scope",
+      "type": "Scope",
+      "name": "Tracking",
+      "geometry": {
+        "x": 320,
+        "y": 10,
+        "width": 80,
+        "height": 60,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "inputs": 1.0
+      }
+    },
+    {
+      "id": "feedback",
+      "type": "Gain",
+      "name": "Sensor",
+      "geometry": {
+        "x": 60,
+        "y": 170,
+        "width": 70,
+        "height": 50,
+        "rotation": 0,
+        "mirrored": true
+      },
+      "params": {
+        "gain": [
+          1.0
+        ]
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "wire_1",
+      "source": {
+        "block": "setpoint",
+        "port": 0
+      },
+      "target": {
+        "block": "error",
+        "port": 0
+      }
+    },
+    {
+      "id": "wire_2",
+      "source": {
+        "block": "feedback",
+        "port": 0
+      },
+      "target": {
+        "block": "error",
+        "port": 1
+      }
+    },
+    {
+      "id": "wire_3",
+      "source": {
+        "block": "error",
+        "port": 0
+      },
+      "target": {
+        "block": "pid",
+        "port": 0
+      }
+    },
+    {
+      "id": "wire_4",
+      "source": {
+        "block": "pid",
+        "port": 0
+      },
+      "target": {
+        "block": "plant",
+        "port": 0
+      }
+    },
+    {
+      "id": "wire_5",
+      "source": {
+        "block": "plant",
+        "port": 0
+      },
+      "target": {
+        "block": "feedback",
+        "port": 0
+      }
+    },
+    {
+      "id": "wire_6",
+      "source": {
+        "block": "plant",
+        "port": 0
+      },
+      "target": {
+        "block": "mux",
+        "port": 0
+      }
+    },
+    {
+      "id": "wire_7",
+      "source": {
+        "block": "setpoint",
+        "port": 0
+      },
+      "target": {
+        "block": "mux",
+        "port": 1
+      }
+    },
+    {
+      "id": "wire_8",
+      "source": {
+        "block": "mux",
+        "port": 0
+      },
+      "target": {
+        "block": "scope",
+        "port": 0
+      }
+    }
+  ]
+}

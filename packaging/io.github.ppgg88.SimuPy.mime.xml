@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Matched by glob only: the format is JSON. -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-simupy-model">
+    <comment>SimuPy model</comment>
+    <sub-class-of type="application/json"/>
+    <icon name="io.github.ppgg88.SimuPy"/>
+    <glob pattern="*.spy"/>
+  </mime-type>
+</mime-info>

@@ -1,0 +1,422 @@
+{
+  "format": "simupy-library",
+  "version": 1,
+  "name": "Hardware",
+  "revision": 1,
+  "author": "SimuPy",
+  "description": "Blocks that talk to things outside the process: UDP, serial (Arduino), ROS 2. Each names the package it needs, and none is required to use SimuPy.",
+  "blocks": [
+    {
+      "name": "UdpSend",
+      "displayName": "UDP send",
+      "category": "Hardware",
+      "description": "Sends the input as float64s to a UDP address. No dependencies \u2014 the quickest way out of the process.",
+      "kind": "python",
+      "width": 120.0,
+      "height": 60.0,
+      "params": [
+        {
+          "name": "host",
+          "label": "Host",
+          "kind": "text",
+          "default": "127.0.0.1",
+          "tooltip": ""
+        },
+        {
+          "name": "port",
+          "label": "Port",
+          "kind": "integer",
+          "default": 5005,
+          "tooltip": ""
+        },
+        {
+          "name": "decimation",
+          "label": "Send every N steps",
+          "kind": "integer",
+          "default": 1,
+          "tooltip": "Raise it when the far end cannot keep up."
+        }
+      ],
+      "code": "\nimport socket\nimport struct\n\nfrom simupy import HardwareBlock\n\nclass UdpSend(HardwareBlock):\n    \"\"\"Sends the input as little-endian float64s to a UDP address.\n\n    No dependencies and no wiring: the quickest way to get a signal out of\n    SimuPy and into something else on the machine or the network.\n    \"\"\"\n\n    inputs = [\"u\"]\n    outputs = 0\n\n    def open_device(self):\n        return socket.socket(socket.AF_INET, socket.SOCK_DGRAM)\n\n    def configure(self, widths):\n        self.target = (self.params[\"host\"], int(self.params[\"port\"]))\n        self.every = max(1, int(self.params.get(\"decimation\", 1)))\n        self.count = 0\n        return None\n\n    def output(self, t, u):\n        # No side effects in output(): the solver calls it at trial states.\n        return None\n\n    def update(self, t, u):\n        self.count += 1\n        if self.count % self.every:\n            return self.xd\n\n        values = list(u[0])\n        packet = struct.pack(f\"<d{len(values)}d\", t, *values)\n        try:\n            self.device.sendto(packet, self.target)\n        except OSError as error:\n            # Not fatal: the far end may simply not be listening yet.\n            print(f\"UdpSend: {error}\")\n        return self.xd\n\n    discrete_states = 1\n    direct_feedthrough = False\n",
+      "parameters": "",
+      "icon": {
+        "kind": "text",
+        "text": "UDP\u25b6"
+      }
+    },
+    {
+      "name": "UdpReceive",
+      "displayName": "UDP receive",
+      "category": "Hardware",
+      "description": "Reads float64s from a UDP port, non-blocking. Holds the last value when nothing arrives.",
+      "kind": "python",
+      "width": 120.0,
+      "height": 60.0,
+      "params": [
+        {
+          "name": "host",
+          "label": "Bind address",
+          "kind": "text",
+          "default": "0.0.0.0",
+          "tooltip": ""
+        },
+        {
+          "name": "port",
+          "label": "Port",
+          "kind": "integer",
+          "default": 5006,
+          "tooltip": ""
+        },
+        {
+          "name": "width",
+          "label": "Signal width",
+          "kind": "integer",
+          "default": 1,
+          "tooltip": ""
+        }
+      ],
+      "code": "\nimport socket\nimport struct\n\nimport numpy as np\nfrom simupy import HardwareBlock\n\nclass UdpReceive(HardwareBlock):\n    \"\"\"Reads little-endian float64s from a UDP port.\n\n    Non-blocking: the newest datagram wins and the last value is held when\n    nothing has arrived, so a slow or absent sender never stalls the solver.\n    \"\"\"\n\n    inputs = 0\n    outputs = [\"y\"]\n    direct_feedthrough = False\n\n    def open_device(self):\n        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)\n        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)\n        sock.bind((self.params[\"host\"], int(self.params[\"port\"])))\n        sock.setblocking(False)\n        return sock\n\n    def configure(self, widths):\n        self.width = max(1, int(self.params[\"width\"]))\n        self.value = np.zeros(self.width)\n        return self.width\n\n    def output(self, t, u):\n        # Drained, not read once: only the freshest datagram matters.\n        while True:\n            try:\n                packet, _ = self.device.recvfrom(65535)\n            except BlockingIOError:\n                break\n            except OSError:\n                break\n\n            count = len(packet) // 8 - 1\n            if count < 1:\n                continue\n            fields = struct.unpack(f\"<d{count}d\", packet[: (count + 1) * 8])\n            incoming = np.asarray(fields[1:], dtype=float)\n            take = min(self.width, incoming.size)\n            self.value[:take] = incoming[:take]\n\n        return self.value\n",
+      "parameters": "",
+      "icon": {
+        "kind": "text",
+        "text": "\u25b6UDP"
+      }
+    },
+    {
+      "name": "SerialSend",
+      "displayName": "Serial send",
+      "category": "Hardware",
+      "description": "Writes the input to a serial port \u2014 an Arduino, a driver, a PLC. Needs pyserial.",
+      "kind": "python",
+      "width": 120.0,
+      "height": 60.0,
+      "params": [
+        {
+          "name": "port",
+          "label": "Device",
+          "kind": "text",
+          "default": "/dev/ttyUSB0",
+          "tooltip": ""
+        },
+        {
+          "name": "baud",
+          "label": "Baud rate",
+          "kind": "integer",
+          "default": 115200,
+          "tooltip": ""
+        },
+        {
+          "name": "format",
+          "label": "Format",
+          "kind": "text",
+          "default": "text",
+          "tooltip": "'text' for one line per step, 'binary' for packed float64s."
+        },
+        {
+          "name": "decimation",
+          "label": "Send every N steps",
+          "kind": "integer",
+          "default": 1,
+          "tooltip": ""
+        }
+      ],
+      "code": "\nimport struct\n\nfrom simupy import HardwareBlock, require\n\nclass SerialSend(HardwareBlock):\n    \"\"\"Writes the input to a serial port \u2014 an Arduino, a motor driver, a PLC.\n\n    One line of ASCII per accepted step by default, which is what an Arduino\n    sketch using ``Serial.parseFloat()`` expects. Switch ``format`` to\n    ``binary`` for packed float64s when the far end can read them.\n    \"\"\"\n\n    inputs = [\"u\"]\n    outputs = 0\n    discrete_states = 1\n    direct_feedthrough = False\n\n    def open_device(self):\n        serial = require(\"serial\", \"pyserial\", \"talking to a serial device\")\n        return serial.Serial(\n            port=self.params[\"port\"],\n            baudrate=int(self.params[\"baud\"]),\n            timeout=0,          # never block the solver on a write\n            write_timeout=0.05,\n        )\n\n    def configure(self, widths):\n        self.binary = str(self.params.get(\"format\", \"text\")) == \"binary\"\n        self.every = max(1, int(self.params.get(\"decimation\", 1)))\n        self.count = 0\n        return None\n\n    def output(self, t, u):\n        return None\n\n    def update(self, t, u):\n        self.count += 1\n        if self.count % self.every:\n            return self.xd\n\n        values = list(u[0])\n        try:\n            if self.binary:\n                self.device.write(struct.pack(f\"<{len(values)}d\", *values))\n            else:\n                line = \" \".join(f\"{v:.6g}\" for v in values)\n                self.device.write((line + \"\\n\").encode(\"ascii\"))\n        except Exception as error:  # pyserial raises several unrelated types\n            print(f\"SerialSend: {error}\")\n        return self.xd\n",
+      "parameters": "",
+      "icon": {
+        "kind": "text",
+        "text": "TX"
+      }
+    },
+    {
+      "name": "SerialReceive",
+      "displayName": "Serial receive",
+      "category": "Hardware",
+      "description": "Reads numbers from a serial port on a background thread, so a slow device never delays the solver. Needs pyserial.",
+      "kind": "python",
+      "width": 120.0,
+      "height": 60.0,
+      "params": [
+        {
+          "name": "port",
+          "label": "Device",
+          "kind": "text",
+          "default": "/dev/ttyUSB0",
+          "tooltip": ""
+        },
+        {
+          "name": "baud",
+          "label": "Baud rate",
+          "kind": "integer",
+          "default": 115200,
+          "tooltip": ""
+        },
+        {
+          "name": "width",
+          "label": "Signal width",
+          "kind": "integer",
+          "default": 1,
+          "tooltip": ""
+        }
+      ],
+      "code": "\nimport threading\n\nimport numpy as np\nfrom simupy import HardwareBlock, require\n\nclass SerialReceive(HardwareBlock):\n    \"\"\"Reads whitespace-separated numbers from a serial port, one line each.\n\n    The port is read by a background thread, not by ``output()``. A blocking\n    read in the solver loop would make the simulation late by however long the\n    device took to answer; this way the thread waits and the solver always\n    gets the most recent complete line.\n\n    That thread needs Python's global lock, which SimuPy hands back while a\n    real-time run waits between steps \u2014 so this works properly in a paced run\n    and is of limited use in one going flat out.\n    \"\"\"\n\n    inputs = 0\n    outputs = [\"y\"]\n    direct_feedthrough = False\n\n    def open_device(self):\n        serial = require(\"serial\", \"pyserial\", \"reading from a serial device\")\n        return serial.Serial(\n            port=self.params[\"port\"],\n            baudrate=int(self.params[\"baud\"]),\n            timeout=0.1,\n        )\n\n    def configure(self, widths):\n        self.width = max(1, int(self.params[\"width\"]))\n        self.value = np.zeros(self.width)\n        self.lock = threading.Lock()\n        self.running = True\n        self.reader = threading.Thread(target=self._read_loop, daemon=True)\n        self.reader.start()\n        return self.width\n\n    def _read_loop(self):\n        while self.running:\n            try:\n                line = self.device.readline()\n            except Exception:\n                break\n            if not line:\n                continue\n            try:\n                fields = [float(f) for f in line.split()]\n            except ValueError:\n                continue        # a partial or noisy line; wait for the next\n            if not fields:\n                continue\n            with self.lock:\n                take = min(self.width, len(fields))\n                self.value[:take] = fields[:take]\n\n    def output(self, t, u):\n        with self.lock:\n            return self.value.copy()\n\n    def close_device(self, device):\n        # Stop the thread before the port it is reading disappears.\n        self.running = False\n        if self.reader.is_alive():\n            self.reader.join(timeout=1.0)\n        device.close()\n",
+      "parameters": "",
+      "icon": {
+        "kind": "text",
+        "text": "RX"
+      }
+    },
+    {
+      "name": "Ros2Publish",
+      "displayName": "ROS 2 publish",
+      "category": "Hardware",
+      "description": "Publishes the input on a ROS 2 topic. Needs a sourced ROS 2 installation; start from this and change the message type.",
+      "kind": "python",
+      "width": 120.0,
+      "height": 60.0,
+      "params": [
+        {
+          "name": "topic",
+          "label": "Topic",
+          "kind": "text",
+          "default": "/simupy/out",
+          "tooltip": ""
+        },
+        {
+          "name": "node",
+          "label": "Node name",
+          "kind": "text",
+          "default": "simupy",
+          "tooltip": ""
+        },
+        {
+          "name": "decimation",
+          "label": "Publish every N steps",
+          "kind": "integer",
+          "default": 1,
+          "tooltip": ""
+        }
+      ],
+      "code": "\nimport threading\n\nfrom simupy import HardwareBlock, require\n\nclass Ros2Publish(HardwareBlock):\n    \"\"\"Publishes the input on a ROS 2 topic as std_msgs/Float64MultiArray.\n\n    Needs a sourced ROS 2 installation on PYTHONPATH; SimuPy does not bundle\n    one. Start from this and change the message type to whatever your graph\n    actually speaks \u2014 the shape of the block stays the same.\n    \"\"\"\n\n    inputs = [\"u\"]\n    outputs = 0\n    discrete_states = 1\n    direct_feedthrough = False\n\n    def open_device(self):\n        rclpy = require(\"rclpy\", \"rclpy\", \"publishing to ROS 2\")\n        msgs = require(\"std_msgs.msg\", \"std_msgs\", \"ROS 2 message types\")\n\n        if not rclpy.ok():\n            rclpy.init()\n        node = rclpy.create_node(str(self.params[\"node\"]))\n        self.publisher = node.create_publisher(\n            msgs.Float64MultiArray, str(self.params[\"topic\"]), 10)\n        self.message = msgs.Float64MultiArray\n\n        # Its own thread, so callbacks are serviced between solver steps.\n        self.rclpy = rclpy\n        self.running = True\n        self.spinner = threading.Thread(\n            target=lambda: rclpy.spin(node), daemon=True)\n        self.spinner.start()\n        return node\n\n    def configure(self, widths):\n        self.every = max(1, int(self.params.get(\"decimation\", 1)))\n        self.count = 0\n        return None\n\n    def output(self, t, u):\n        return None\n\n    def update(self, t, u):\n        self.count += 1\n        if self.count % self.every:\n            return self.xd\n        message = self.message()\n        message.data = [float(v) for v in u[0]]\n        self.publisher.publish(message)\n        return self.xd\n\n    def close_device(self, device):\n        self.running = False\n        device.destroy_node()\n        # Not rclpy.shutdown(): another block may share the context.\n",
+      "parameters": "",
+      "icon": {
+        "kind": "text",
+        "text": "ROS\u25b6"
+      }
+    },
+    {
+      "name": "ArduinoAnalogRead",
+      "displayName": "Arduino analogRead",
+      "category": "Hardware",
+      "description": "Reads an analog pin from a board running the simupy_bridge firmware. Output is 0..1 scaled by 'Full scale'.",
+      "kind": "python",
+      "width": 140.0,
+      "height": 60.0,
+      "params": [
+        {
+          "name": "port",
+          "label": "Port",
+          "kind": "text",
+          "default": "/dev/ttyUSB0",
+          "tooltip": "Serial device: /dev/ttyUSB0 or /dev/ttyACM0 on Linux, COM3 on Windows. Blocks sharing a port share one connection."
+        },
+        {
+          "name": "baud",
+          "label": "Baud rate",
+          "kind": "integer",
+          "default": 115200,
+          "tooltip": ""
+        },
+        {
+          "name": "pin",
+          "label": "Pin",
+          "kind": "integer",
+          "default": 0,
+          "tooltip": ""
+        },
+        {
+          "name": "rate",
+          "label": "Stream rate (Hz)",
+          "kind": "integer",
+          "default": 200,
+          "tooltip": "How often the board sends its inputs. Set once per board."
+        },
+        {
+          "name": "fullScale",
+          "label": "Full scale",
+          "kind": "real",
+          "default": 1.0,
+          "tooltip": "Multiplies the 0..1 reading. Set it to the board's reference voltage to read volts."
+        },
+        {
+          "name": "offset",
+          "label": "Offset",
+          "kind": "real",
+          "default": 0.0,
+          "tooltip": ""
+        }
+      ],
+      "code": "\nfrom simupy import ArduinoBlock\n\nclass ArduinoAnalogRead(ArduinoBlock):\n    \"\"\"Reads an analog input, streamed continuously by the board.\n\n    The value is whatever arrived most recently \u2014 never a round trip taken\n    inside the solver loop, which at 115200 baud would cost about a\n    millisecond per step.\n    \"\"\"\n\n    outputs = [\"y\"]\n\n    def configure(self, widths):\n        self.pin = int(self.params[\"pin\"])\n        self.scale = float(self.params.get(\"fullScale\", 1.0))\n        self.offset = float(self.params.get(\"offset\", 0.0))\n        return 1\n\n    def output(self, t, u):\n        # Opens the link and registers the pin; setup() runs several times.\n        board = self.device\n        board.add_input(self.pin, analog=True)\n        return board.read(self.pin, analog=True) * self.scale + self.offset\n",
+      "parameters": "",
+      "icon": {
+        "kind": "text",
+        "text": "A\u2192"
+      }
+    },
+    {
+      "name": "ArduinoDigitalRead",
+      "displayName": "Arduino digitalRead",
+      "category": "Hardware",
+      "description": "Reads a digital pin from a board running the simupy_bridge firmware.",
+      "kind": "python",
+      "width": 140.0,
+      "height": 60.0,
+      "params": [
+        {
+          "name": "port",
+          "label": "Port",
+          "kind": "text",
+          "default": "/dev/ttyUSB0",
+          "tooltip": "Serial device: /dev/ttyUSB0 or /dev/ttyACM0 on Linux, COM3 on Windows. Blocks sharing a port share one connection."
+        },
+        {
+          "name": "baud",
+          "label": "Baud rate",
+          "kind": "integer",
+          "default": 115200,
+          "tooltip": ""
+        },
+        {
+          "name": "pin",
+          "label": "Pin",
+          "kind": "integer",
+          "default": 2,
+          "tooltip": ""
+        },
+        {
+          "name": "rate",
+          "label": "Stream rate (Hz)",
+          "kind": "integer",
+          "default": 200,
+          "tooltip": "How often the board sends its inputs. Set once per board."
+        },
+        {
+          "name": "mode",
+          "label": "Input mode",
+          "kind": "text",
+          "default": "input",
+          "tooltip": "'input' or 'pullup'."
+        }
+      ],
+      "code": "\nfrom simupy import ArduinoBlock\n\nclass ArduinoDigitalRead(ArduinoBlock):\n    \"\"\"Reads a digital input, streamed continuously by the board.\"\"\"\n\n    outputs = [\"y\"]\n\n    def configure(self, widths):\n        self.pin = int(self.params[\"pin\"])\n        self.pullup = str(self.params.get(\"mode\", \"input\")) == \"pullup\"\n        self.armed = False\n        return 1\n\n    def output(self, t, u):\n        board = self.device\n        if not self.armed:\n            board.set_mode(self.pin, \"U\" if self.pullup else \"I\")\n            self.armed = True\n        board.add_input(self.pin, analog=False)\n        return board.read(self.pin, analog=False)\n",
+      "parameters": "",
+      "icon": {
+        "kind": "text",
+        "text": "D\u2192"
+      }
+    },
+    {
+      "name": "ArduinoAnalogWrite",
+      "displayName": "Arduino analogWrite",
+      "category": "Hardware",
+      "description": "Drives a PWM pin. The input is a duty between 0 and 'Full scale'; the board scales it to its own PWM width.",
+      "kind": "python",
+      "width": 140.0,
+      "height": 60.0,
+      "params": [
+        {
+          "name": "port",
+          "label": "Port",
+          "kind": "text",
+          "default": "/dev/ttyUSB0",
+          "tooltip": "Serial device: /dev/ttyUSB0 or /dev/ttyACM0 on Linux, COM3 on Windows. Blocks sharing a port share one connection."
+        },
+        {
+          "name": "baud",
+          "label": "Baud rate",
+          "kind": "integer",
+          "default": 115200,
+          "tooltip": ""
+        },
+        {
+          "name": "pin",
+          "label": "Pin",
+          "kind": "integer",
+          "default": 9,
+          "tooltip": ""
+        },
+        {
+          "name": "rate",
+          "label": "Stream rate (Hz)",
+          "kind": "integer",
+          "default": 200,
+          "tooltip": "How often the board sends its inputs. Set once per board."
+        },
+        {
+          "name": "fullScale",
+          "label": "Full scale",
+          "kind": "real",
+          "default": 1.0,
+          "tooltip": "The input value that means fully on."
+        }
+      ],
+      "code": "\nfrom simupy import ArduinoBlock\n\nclass ArduinoAnalogWrite(ArduinoBlock):\n    \"\"\"Drives a PWM pin from the input, as a duty between 0 and 1.\n\n    The board scales the duty to its own PWM width, so the same model drives\n    an Uno's 8 bits and an ESP32's 12 without knowing which it is talking to.\n    \"\"\"\n\n    inputs = [\"u\"]\n    discrete_states = 1\n\n    def configure(self, widths):\n        self.pin = int(self.params[\"pin\"])\n        self.scale = float(self.params.get(\"fullScale\", 1.0))\n        self.last = None\n        return None\n\n    def output(self, t, u):\n        # No side effects in output(): a pin cannot be un-driven.\n        return None\n\n    def update(self, t, u):\n        duty = float(u[0][0]) / self.scale if self.scale else 0.0\n        duty = 0.0 if duty < 0.0 else (1.0 if duty > 1.0 else duty)\n        # Quantised, so noise does not fill the link with identical commands.\n        step = round(duty * 1000.0)\n        if step != self.last:\n            self.last = step\n            self.device.write_pwm(self.pin, step / 1000.0)\n        return self.xd\n",
+      "parameters": "",
+      "icon": {
+        "kind": "text",
+        "text": "\u2192P"
+      }
+    },
+    {
+      "name": "ArduinoDigitalWrite",
+      "displayName": "Arduino digitalWrite",
+      "category": "Hardware",
+      "description": "Drives a digital pin high while the input is above the threshold. Declares a zero crossing, so the pin changes at the instant the model says it does.",
+      "kind": "python",
+      "width": 140.0,
+      "height": 60.0,
+      "params": [
+        {
+          "name": "port",
+          "label": "Port",
+          "kind": "text",
+          "default": "/dev/ttyUSB0",
+          "tooltip": "Serial device: /dev/ttyUSB0 or /dev/ttyACM0 on Linux, COM3 on Windows. Blocks sharing a port share one connection."
+        },
+        {
+          "name": "baud",
+          "label": "Baud rate",
+          "kind": "integer",
+          "default": 115200,
+          "tooltip": ""
+        },
+        {
+          "name": "pin",
+          "label": "Pin",
+          "kind": "integer",
+          "default": 13,
+          "tooltip": ""
+        },
+        {
+          "name": "rate",
+          "label": "Stream rate (Hz)",
+          "kind": "integer",
+          "default": 200,
+          "tooltip": "How often the board sends its inputs. Set once per board."
+        },
+        {
+          "name": "threshold",
+          "label": "Threshold",
+          "kind": "real",
+          "default": 0.5,
+          "tooltip": ""
+        }
+      ],
+      "code": "\nfrom simupy import ArduinoBlock\n\nclass ArduinoDigitalWrite(ArduinoBlock):\n    \"\"\"Drives a digital output: high when the input is above the threshold.\"\"\"\n\n    inputs = [\"u\"]\n    discrete_states = 1\n    zero_crossings = 1\n\n    def configure(self, widths):\n        self.pin = int(self.params[\"pin\"])\n        self.threshold = float(self.params.get(\"threshold\", 0.5))\n        self.last = None\n        return None\n\n    def output(self, t, u):\n        return None\n\n    def zero_crossing(self, t, u):\n        # Declared so the solver lands a step on the switching instant.\n        return [float(u[0][0]) - self.threshold]\n\n    def update(self, t, u):\n        level = 1 if float(u[0][0]) > self.threshold else 0\n        if level != self.last:\n            self.last = level\n            self.device.write_digital(self.pin, level)\n        return self.xd\n",
+      "parameters": "",
+      "icon": {
+        "kind": "text",
+        "text": "\u2192D"
+      }
+    }
+  ]
+}

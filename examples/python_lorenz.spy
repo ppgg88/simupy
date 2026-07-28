@@ -1,0 +1,66 @@
+{
+  "format": "simupy-model",
+  "version": 1,
+  "name": "lorenz attractor",
+  "solver": {
+    "method": "rk45",
+    "startTime": 0.0,
+    "stopTime": 40.0,
+    "fixedStep": 0.001,
+    "maxStep": 0.0,
+    "minStep": 1e-12,
+    "initialStep": 0.0,
+    "relTol": 1e-09,
+    "absTol": 1e-11,
+    "maxLoggedSamples": 200000
+  },
+  "blocks": [
+    {
+      "id": "lorenz",
+      "type": "PythonFunction",
+      "name": "Lorenz",
+      "geometry": {
+        "x": -200,
+        "y": 0,
+        "width": 120,
+        "height": 70,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "code": "import numpy as np\nfrom simupy import Block\n\nclass Lorenz(Block):\n    \"\"\"The Lorenz system, integrated by the C++ solver.\"\"\"\n\n    inputs = 0\n    outputs = [\"xyz\"]\n    states = 3\n    direct_feedthrough = False\n\n    def setup(self, widths):\n        self.sigma = self.params.get(\"sigma\", 10.0)\n        self.rho = self.params.get(\"rho\", 28.0)\n        self.beta = self.params.get(\"beta\", 8.0 / 3.0)\n        return 3\n\n    def initial_state(self):\n        return [1.0, 1.0, 1.0]\n\n    def output(self, t, u):\n        return self.x\n\n    def derivative(self, t, u):\n        x, y, z = self.x\n        return np.array([\n            self.sigma * (y - x),\n            x * (self.rho - z) - y,\n            x * y - self.beta * z,\n        ])\n",
+        "className": "Lorenz",
+        "parameters": "sigma = 10.0\nrho = 28.0\nbeta = 8.0 / 3.0"
+      }
+    },
+    {
+      "id": "scope",
+      "type": "Scope",
+      "name": "States",
+      "geometry": {
+        "x": 40,
+        "y": 0,
+        "width": 80,
+        "height": 60,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "inputs": 1.0
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "wire_1",
+      "source": {
+        "block": "lorenz",
+        "port": 0
+      },
+      "target": {
+        "block": "scope",
+        "port": 0
+      }
+    }
+  ]
+}

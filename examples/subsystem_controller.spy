@@ -1,0 +1,436 @@
+{
+  "format": "simupy-model",
+  "version": 1,
+  "name": "subsystem controller",
+  "solver": {
+    "method": "rk45",
+    "startTime": 0.0,
+    "stopTime": 8.0,
+    "fixedStep": 0.001,
+    "maxStep": 0.0,
+    "minStep": 1e-12,
+    "initialStep": 0.0,
+    "relTol": 1e-06,
+    "absTol": 1e-09,
+    "maxLoggedSamples": 200000
+  },
+  "blocks": [
+    {
+      "id": "setpoint",
+      "type": "Step",
+      "name": "Setpoint",
+      "geometry": {
+        "x": -460,
+        "y": 0,
+        "width": 80,
+        "height": 60,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "stepTime": 0.5,
+        "initialValue": [
+          0.0
+        ],
+        "finalValue": [
+          1.0
+        ]
+      }
+    },
+    {
+      "id": "error",
+      "type": "Sum",
+      "name": "Error",
+      "geometry": {
+        "x": -300,
+        "y": 10,
+        "width": 60,
+        "height": 60,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "signs": "+-"
+      }
+    },
+    {
+      "id": "ctrl",
+      "type": "Subsystem",
+      "name": "PI Controller",
+      "geometry": {
+        "x": -160,
+        "y": 0,
+        "width": 130,
+        "height": 80,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {},
+      "contents": {
+        "blocks": [
+          {
+            "id": "in1",
+            "type": "Inport",
+            "name": "error",
+            "geometry": {
+              "x": -420,
+              "y": 40,
+              "width": 80,
+              "height": 60,
+              "rotation": 0,
+              "mirrored": false
+            },
+            "params": {
+              "portNumber": 1
+            }
+          },
+          {
+            "id": "kp",
+            "type": "Gain",
+            "name": "Kp",
+            "geometry": {
+              "x": -240,
+              "y": -40,
+              "width": 70,
+              "height": 50,
+              "rotation": 0,
+              "mirrored": false
+            },
+            "params": {
+              "gain": [
+                4.0
+              ]
+            }
+          },
+          {
+            "id": "ki",
+            "type": "Gain",
+            "name": "Ki",
+            "geometry": {
+              "x": -240,
+              "y": 120,
+              "width": 70,
+              "height": 50,
+              "rotation": 0,
+              "mirrored": false
+            },
+            "params": {
+              "gain": [
+                6.0
+              ]
+            }
+          },
+          {
+            "id": "integ",
+            "type": "Integrator",
+            "name": "Integral",
+            "geometry": {
+              "x": -80,
+              "y": 120,
+              "width": 70,
+              "height": 60,
+              "rotation": 0,
+              "mirrored": false
+            },
+            "params": {
+              "initialCondition": [
+                0.0
+              ]
+            }
+          },
+          {
+            "id": "sum",
+            "type": "Sum",
+            "name": "Total",
+            "geometry": {
+              "x": 90,
+              "y": 40,
+              "width": 60,
+              "height": 60,
+              "rotation": 0,
+              "mirrored": false
+            },
+            "params": {
+              "signs": "++"
+            }
+          },
+          {
+            "id": "sat",
+            "type": "Saturation",
+            "name": "Limit",
+            "geometry": {
+              "x": 230,
+              "y": 40,
+              "width": 80,
+              "height": 60,
+              "rotation": 0,
+              "mirrored": false
+            },
+            "params": {
+              "upperLimit": 8.0,
+              "lowerLimit": -8.0
+            }
+          },
+          {
+            "id": "out1",
+            "type": "Outport",
+            "name": "command",
+            "geometry": {
+              "x": 390,
+              "y": 40,
+              "width": 80,
+              "height": 60,
+              "rotation": 0,
+              "mirrored": false
+            },
+            "params": {
+              "portNumber": 1
+            }
+          }
+        ],
+        "connections": [
+          {
+            "id": "w1",
+            "source": {
+              "block": "in1",
+              "port": 0
+            },
+            "target": {
+              "block": "kp",
+              "port": 0
+            }
+          },
+          {
+            "id": "w2",
+            "source": {
+              "block": "in1",
+              "port": 0
+            },
+            "target": {
+              "block": "ki",
+              "port": 0
+            }
+          },
+          {
+            "id": "w3",
+            "source": {
+              "block": "ki",
+              "port": 0
+            },
+            "target": {
+              "block": "integ",
+              "port": 0
+            }
+          },
+          {
+            "id": "w4",
+            "source": {
+              "block": "kp",
+              "port": 0
+            },
+            "target": {
+              "block": "sum",
+              "port": 0
+            }
+          },
+          {
+            "id": "w5",
+            "source": {
+              "block": "integ",
+              "port": 0
+            },
+            "target": {
+              "block": "sum",
+              "port": 1
+            }
+          },
+          {
+            "id": "w6",
+            "source": {
+              "block": "sum",
+              "port": 0
+            },
+            "target": {
+              "block": "sat",
+              "port": 0
+            }
+          },
+          {
+            "id": "w7",
+            "source": {
+              "block": "sat",
+              "port": 0
+            },
+            "target": {
+              "block": "out1",
+              "port": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "plant",
+      "type": "TransferFcn",
+      "name": "Plant",
+      "geometry": {
+        "x": 40,
+        "y": 0,
+        "width": 130,
+        "height": 60,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "numerator": [
+          2.0
+        ],
+        "denominator": [
+          1.0,
+          3.0,
+          2.0
+        ]
+      }
+    },
+    {
+      "id": "mux",
+      "type": "Mux",
+      "name": "Mux",
+      "geometry": {
+        "x": 250,
+        "y": 10,
+        "width": 24,
+        "height": 80,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "inputs": 2.0
+      }
+    },
+    {
+      "id": "scope",
+      "type": "Scope",
+      "name": "Tracking",
+      "geometry": {
+        "x": 360,
+        "y": 10,
+        "width": 80,
+        "height": 60,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "inputs": 1.0
+      }
+    },
+    {
+      "id": "fb",
+      "type": "Gain",
+      "name": "Sensor",
+      "geometry": {
+        "x": 60,
+        "y": 200,
+        "width": 70,
+        "height": 50,
+        "rotation": 0,
+        "mirrored": true
+      },
+      "params": {
+        "gain": [
+          1.0
+        ]
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "w1",
+      "source": {
+        "block": "setpoint",
+        "port": 0
+      },
+      "target": {
+        "block": "error",
+        "port": 0
+      }
+    },
+    {
+      "id": "w2",
+      "source": {
+        "block": "fb",
+        "port": 0
+      },
+      "target": {
+        "block": "error",
+        "port": 1
+      }
+    },
+    {
+      "id": "w3",
+      "source": {
+        "block": "error",
+        "port": 0
+      },
+      "target": {
+        "block": "ctrl",
+        "port": 0
+      }
+    },
+    {
+      "id": "w4",
+      "source": {
+        "block": "ctrl",
+        "port": 0
+      },
+      "target": {
+        "block": "plant",
+        "port": 0
+      }
+    },
+    {
+      "id": "w5",
+      "source": {
+        "block": "plant",
+        "port": 0
+      },
+      "target": {
+        "block": "fb",
+        "port": 0
+      }
+    },
+    {
+      "id": "w6",
+      "source": {
+        "block": "plant",
+        "port": 0
+      },
+      "target": {
+        "block": "mux",
+        "port": 0
+      }
+    },
+    {
+      "id": "w7",
+      "source": {
+        "block": "setpoint",
+        "port": 0
+      },
+      "target": {
+        "block": "mux",
+        "port": 1
+      }
+    },
+    {
+      "id": "w8",
+      "source": {
+        "block": "mux",
+        "port": 0
+      },
+      "target": {
+        "block": "scope",
+        "port": 0
+      }
+    }
+  ]
+}

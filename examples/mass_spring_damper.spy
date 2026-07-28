@@ -1,0 +1,143 @@
+{
+  "format": "simupy-model",
+  "version": 1,
+  "name": "mass spring damper",
+  "solver": {
+    "method": "rk45",
+    "startTime": 0.0,
+    "stopTime": 12.0,
+    "fixedStep": 0.001,
+    "maxStep": 0.0,
+    "minStep": 1e-12,
+    "initialStep": 0.0,
+    "relTol": 0.0001,
+    "absTol": 1e-07,
+    "maxLoggedSamples": 200000
+  },
+  "blocks": [
+    {
+      "id": "step",
+      "type": "Step",
+      "name": "Force",
+      "geometry": {
+        "x": -260,
+        "y": 0,
+        "width": 80,
+        "height": 60,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "stepTime": 1.0,
+        "initialValue": [
+          0.0
+        ],
+        "finalValue": [
+          1.0
+        ]
+      }
+    },
+    {
+      "id": "plant",
+      "type": "TransferFcn",
+      "name": "Plant",
+      "geometry": {
+        "x": -60,
+        "y": 0,
+        "width": 130,
+        "height": 60,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "numerator": [
+          1.0
+        ],
+        "denominator": [
+          1.0,
+          0.4,
+          4.0
+        ]
+      }
+    },
+    {
+      "id": "mux",
+      "type": "Mux",
+      "name": "Mux",
+      "geometry": {
+        "x": 140,
+        "y": 10,
+        "width": 24,
+        "height": 80,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "inputs": 2.0
+      }
+    },
+    {
+      "id": "scope",
+      "type": "Scope",
+      "name": "Response",
+      "geometry": {
+        "x": 240,
+        "y": 10,
+        "width": 80,
+        "height": 60,
+        "rotation": 0,
+        "mirrored": false
+      },
+      "params": {
+        "inputs": 1.0,
+        "autoscale": true
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "wire_1",
+      "source": {
+        "block": "step",
+        "port": 0
+      },
+      "target": {
+        "block": "plant",
+        "port": 0
+      }
+    },
+    {
+      "id": "wire_2",
+      "source": {
+        "block": "plant",
+        "port": 0
+      },
+      "target": {
+        "block": "mux",
+        "port": 0
+      }
+    },
+    {
+      "id": "wire_3",
+      "source": {
+        "block": "step",
+        "port": 0
+      },
+      "target": {
+        "block": "mux",
+        "port": 1
+      }
+    },
+    {
+      "id": "wire_4",
+      "source": {
+        "block": "mux",
+        "port": 0
+      },
+      "target": {
+        "block": "scope",
+        "port": 0
+      }
+    }
+  ]
+}

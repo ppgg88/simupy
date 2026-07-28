@@ -1,0 +1,93 @@
+# Wheels and archives are pinned: the build sandbox has no network.
+id: io.github.ppgg88.SimuPy
+runtime: org.kde.Platform
+runtime-version: '6.9'
+sdk: org.kde.Sdk
+command: simupy
+
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  - --filesystem=home
+  # The UDP blocks.
+  - --share=network
+  # Serial ports: Flatpak has no narrower permission than all devices.
+  - --device=all
+
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  - /lib/cmake
+  - /share/cmake
+  - /share/pkgconfig
+  - '*.a'
+  - '*.la'
+
+modules:
+  - name: eigen
+    buildsystem: cmake-ninja
+    builddir: true
+    config-opts:
+      - -DBUILD_TESTING=OFF
+      - -DEIGEN_BUILD_DOC=OFF
+    cleanup: ['*']
+    sources:
+      - type: archive
+        url: https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.gz
+        sha256: 8586084f71f9bde545ee7fa6d00288b264a2b7ac3607b974e54d13e7162c1c72
+
+  - name: nlohmann-json
+    buildsystem: cmake-ninja
+    builddir: true
+    config-opts:
+      - -DJSON_BuildTests=OFF
+    cleanup: ['*']
+    sources:
+      - type: archive
+        url: https://github.com/nlohmann/json/archive/refs/tags/v3.11.3.tar.gz
+        sha256: 0d8ef5af7f9794e3263480193c491549b2ba6cc74bb018906202ada498a79406
+
+  - name: pybind11
+    buildsystem: cmake-ninja
+    builddir: true
+    config-opts:
+      - -DPYBIND11_TEST=OFF
+      - -DPYBIND11_FINDPYTHON=ON
+    cleanup: ['*']
+    sources:
+      - type: archive
+        url: https://github.com/pybind/pybind11/archive/refs/tags/v2.13.6.tar.gz
+        sha256: e08cb87f4773da97fa7b5f035de8763abc656d87d5773e62f6da0587d1f0ec20
+
+  # The runtime's Python already has /app/lib/python3.12/site-packages on its path.
+  - name: python3-modules
+    buildsystem: simple
+    build-commands:
+      - pip3 install --no-index --no-deps --prefix=${FLATPAK_DEST}
+        --find-links="file://${PWD}" numpy pyserial
+    sources:
+      - type: file
+        url: https://files.pythonhosted.org/packages/b8/a9/6e73d68500f80773f65f0654ea932019d6694329a0eb0ed0533de38df376/numpy-2.5.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+        sha256: 59fda5e192b570217ec2580c96f00e9a7e12ef6866a900eb089b62c1a32545ca
+      - type: file
+        url: https://files.pythonhosted.org/packages/07/bc/587a445451b253b285629263eb51c2d8e9bcea4fc97826266d186f96f558/pyserial-3.5-py2.py3-none-any.whl
+        sha256: c4451db6ba391ca6ca299fb3ec7bae67a5c55dde170964c7a14ceefec02f2cf0
+
+  - name: simupy
+    buildsystem: cmake-ninja
+    builddir: true
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DSIMUPY_BUILD_TESTS=OFF
+      # Rewritten by tools/stamp_version.py for a tagged build.
+      - -DSIMUPY_VERSION=0.0.1
+    sources:
+      - type: dir
+        path: ../..
+        skip:
+          - .git
+          - build
+          - build-headless
+          - .flatpak-builder
