@@ -19,11 +19,15 @@
 #include <vector>
 
 using namespace simupy;
+#ifndef _WIN32
 #include <sys/wait.h>
 #include <csignal>
 #include <unistd.h>
+#endif
 
 namespace {
+
+#ifndef _WIN32
 
 /// A `tools/fake_arduino.py` running on its own pseudo-terminal.
 ///
@@ -79,7 +83,8 @@ private:
     std::string port_;
 };
 
-/// Loads the shipped hardware library from wherever the tests were run.
+#endif  // !_WIN32 — the fake board stands on a pty
+
 bool loadHardwareLibrary() {
     try {
         LibraryManager::instance().load("libraries/hardware.spylib");
@@ -91,6 +96,8 @@ bool loadHardwareLibrary() {
 
 }  // namespace
 
+
+#ifndef _WIN32
 
 /// The Arduino path end to end: a duty written to a PWM pin, read back from
 /// the analog pin the board mirrors it to, through one shared serial link.
@@ -208,7 +215,11 @@ void testArduinoDigitalAndSharing() {
                "and the second pin streams alongside it on the same link");
 }
 
+#endif  // !_WIN32
+
 void runHardwareTests() {
+#ifndef _WIN32
     runTest(testArduinoLoopback);
     runTest(testArduinoDigitalAndSharing);
+#endif
 }

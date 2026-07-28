@@ -155,6 +155,11 @@ LibraryManager& LibraryManager::instance() {
 std::string LibraryManager::userDirectory() const {
     if (!userDirectory_.empty()) return userDirectory_;
 
+#ifdef _WIN32
+    const std::string base = environmentPath("APPDATA");
+    if (base.empty()) return "libraries";
+    return base + "/SimuPy/libraries";
+#else
     std::string base = environmentPath("XDG_DATA_HOME");
     if (base.empty()) {
         const std::string home = environmentPath("HOME");
@@ -162,6 +167,7 @@ std::string LibraryManager::userDirectory() const {
         base = home + "/.local/share";
     }
     return base + "/simupy/libraries";
+#endif
 }
 
 void LibraryManager::setUserDirectory(std::string path) {

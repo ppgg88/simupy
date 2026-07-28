@@ -1,0 +1,125 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-24.04
+          - name: Windows
+            os: windows-2022
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Python build and runtime dependencies
+        run: python -m pip install --upgrade pip pybind11 numpy pyserial
+
+      - name: Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build \
+            qt6-base-dev qt6-charts-dev qt6-svg-dev \
+            libeigen3-dev nlohmann-json3-dev python3-dev
+
+      - name: Qt
+        if: runner.os == 'Windows'
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.6.3"
+          modules: qtcharts
+          cache: true
+
+      - name: Windows header-only dependencies
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          # Both are headers, but Eigen ships no usable Eigen3Config.cmake in
+          # its source tarball, so it is installed rather than pointed at.
+          # nlohmann is found by the header search that CMakeLists falls back
+          # to, which looks under <prefix>/include.
+          mkdir -p "$RUNNER_TEMP/src"
+          curl -sL https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.gz \
+            | tar xz -C "$RUNNER_TEMP/src"
+          cmake -S "$RUNNER_TEMP/src/eigen-3.4.0" -B "$RUNNER_TEMP/eigen-build" \
+            -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/prefix" \
+            -DBUILD_TESTING=OFF -DEIGEN_BUILD_DOC=OFF
+          cmake --install "$RUNNER_TEMP/eigen-build"
+
+          curl -sL -o "$RUNNER_TEMP/src/json.tar.xz" \
+            https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
+          tar xf "$RUNNER_TEMP/src/json.tar.xz" -C "$RUNNER_TEMP/src"
+          cp -r "$RUNNER_TEMP/src/json/include/nlohmann" "$RUNNER_TEMP/prefix/include/"
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+
+      - name: Configure
+        shell: bash
+        run: |
+          EXTRA=""
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            EXTRA="-DCMAKE_PREFIX_PATH=$RUNNER_TEMP/prefix"
+          fi
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPython3_EXECUTABLE="$(python -c 'import sys; print(sys.executable)')" \
+            $EXTRA
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure --timeout 180
+
+      # The engine has no business needing Qt or an interpreter to compile.
+      # A build that proves it is cheap; a layering violation found six months
+      # from now is not.
+      - name: Headless build (no GUI)
+        if: runner.os == 'Linux'
+        run: |
+          cmake -S . -B build-headless -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DSIMUPY_BUILD_GUI=OFF
+          cmake --build build-headless --parallel
+          ctest --test-dir build-headless --output-on-failure --timeout 180
+
+  lint:
+    name: Generated files are up to date
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The example models and the hardware library are generated. A change to
+      # the generator that was never run leaves the two disagreeing, and the
+      # difference only shows up when someone opens a stale file.
+      - name: Regenerate and compare
+        run: |
+          cd examples
+          python make_examples.py
+          python make_libraries.py
+          cd ..
+          git diff --exit-code -- examples libraries

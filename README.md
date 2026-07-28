@@ -40,6 +40,25 @@ cmake --build build -j$(nproc)
 `-DSIMUPY_BUILD_GUI=OFF` builds only the engine, the command-line runner and
 the tests — useful on a headless machine.
 
+### Packaging
+
+```sh
+cd build && cpack -G "TGZ;DEB"    # Linux
+cd build && cpack -G "ZIP;NSIS"   # Windows
+```
+
+The `.deb` declares its dependencies, Qt and NumPy included, because the
+application embeds CPython and will not run Python blocks without it. The
+Windows packages bundle Qt and the Python DLL instead; NumPy still has to be
+installed with pip.
+
+Tagging `v*` runs `.github/workflows/release.yml`, which builds, tests and
+packages on both platforms and attaches the assets with their checksums to a
+GitHub release. Every other push runs `ci.yml`: the same build and tests on
+Linux and Windows, a headless build to prove the engine still compiles without
+Qt, and a check that the generated examples and libraries match their
+generators.
+
 ### Checking the build
 
 ```sh
