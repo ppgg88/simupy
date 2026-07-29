@@ -12,3 +12,4 @@ __pycache__/
 *.spy.bak
 simupy_output.csv
 .claude/
+docs/_build/

@@ -104,6 +104,25 @@ jobs:
           cmake --build build-headless --parallel
           ctest --test-dir build-headless --output-on-failure --timeout 180
 
+  docs:
+    name: Documentation
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r docs/requirements.txt
+
+      # -W turns a warning into a failure: a broken cross-reference or a
+      # page missing from the toctree is a documentation bug like any other.
+      - run: sphinx-build -b html -W --keep-going docs docs/_build/html
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: docs/_build/html
+
   lint:
     name: Generated files are up to date
     runs-on: ubuntu-24.04
