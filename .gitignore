@@ -13,3 +13,4 @@ __pycache__/
 simupy_output.csv
 .claude/
 docs/_build/
+deps/

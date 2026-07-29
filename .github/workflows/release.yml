@@ -55,22 +55,32 @@ jobs:
         if: runner.os == 'Windows'
         shell: bash
         run: |
-          # Both are headers, but Eigen ships no usable Eigen3Config.cmake in
-          # its source tarball, so it is installed rather than pointed at.
-          # nlohmann is found by the header search that CMakeLists falls back
-          # to, which looks under <prefix>/include.
-          mkdir -p "$RUNNER_TEMP/src"
-          curl -sL https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.gz \
-            | tar xz -C "$RUNNER_TEMP/src"
-          cmake -S "$RUNNER_TEMP/src/eigen-3.4.0" -B "$RUNNER_TEMP/eigen-build" \
-            -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/prefix" \
-            -DBUILD_TESTING=OFF -DEIGEN_BUILD_DOC=OFF
-          cmake --install "$RUNNER_TEMP/eigen-build"
+          # Paths are the whole difficulty here. RUNNER_TEMP is a Windows path
+          # ("D:\a\_temp") that bash mangles, so the dependencies go in the
+          # workspace instead; and CMake is a Windows program, so it is handed
+          # the mixed form ("D:/a/...") that cygpath produces while tar, cp and
+          # curl keep the POSIX one.
+          DEPS="$PWD/deps"
+          DEPS_WIN="$(cygpath -m "$DEPS")"
+          mkdir -p "$DEPS/src" "$DEPS/prefix/include"
 
-          curl -sL -o "$RUNNER_TEMP/src/json.tar.xz" \
+          # Eigen ships no usable Eigen3Config.cmake in its source tarball, so
+          # it is configured and installed rather than pointed at.
+          curl -sL https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.gz \
+            | tar xz -C "$DEPS/src"
+          cmake -S "$DEPS_WIN/src/eigen-3.4.0" -B "$DEPS_WIN/eigen-build" \
+            -DCMAKE_INSTALL_PREFIX="$DEPS_WIN/prefix" \
+            -DBUILD_TESTING=OFF -DEIGEN_BUILD_DOC=OFF
+          cmake --install "$DEPS_WIN/eigen-build"
+
+          # nlohmann is found by the header search CMakeLists falls back to,
+          # which looks under <prefix>/include.
+          curl -sL -o "$DEPS/src/json.tar.xz" \
             https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
-          tar xf "$RUNNER_TEMP/src/json.tar.xz" -C "$RUNNER_TEMP/src"
-          cp -r "$RUNNER_TEMP/src/json/include/nlohmann" "$RUNNER_TEMP/prefix/include/"
+          tar xf "$DEPS/src/json.tar.xz" -C "$DEPS/src"
+          cp -r "$DEPS/src/json/include/nlohmann" "$DEPS/prefix/include/"
+
+          echo "SIMUPY_PREFIX=$DEPS_WIN/prefix" >> "$GITHUB_ENV"
 
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
@@ -80,11 +90,11 @@ jobs:
         run: |
           EXTRA=""
           if [ "$RUNNER_OS" = "Windows" ]; then
-            EXTRA="-DCMAKE_PREFIX_PATH=$RUNNER_TEMP/prefix"
+            EXTRA="-DCMAKE_PREFIX_PATH=$SIMUPY_PREFIX"
           fi
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DPython3_EXECUTABLE="$(python -c 'import sys; print(sys.executable)')" \
+            -DPython3_EXECUTABLE="$(python -c 'import sys; print(sys.executable.replace(chr(92), "/"))')" \
             $EXTRA
           cmake --build build --parallel
 
@@ -107,7 +117,7 @@ jobs:
         run: |
           windeployqt --release --no-translations --no-system-d3d-compiler \
             build/bin/simupy.exe
-          PYDLL=$(python -c "import sys,os;print(os.path.join(sys.base_prefix,f'python{sys.version_info.major}{sys.version_info.minor}.dll'))")
+          PYDLL=$(python -c "import sys; v=sys.version_info; print(f'{sys.base_prefix}/python{v.major}{v.minor}.dll'.replace(chr(92), '/'))")
           cp "$PYDLL" build/bin/
 
       - name: Package (Windows)
