@@ -451,10 +451,10 @@ void testZeroCrossingAccuracy() {
 
     auto build = [](Model& model, bool detect) {
         Block* sine = model.addBlock("Sine", 0, 0);
-        sine->params().set("frequency", 2.0 * M_PI);
+        sine->params().set("frequency", 2.0 * kPi);
         // A quarter-turn of phase makes this a cosine, so the run does not
         // start on a zero where sign() is genuinely ambiguous.
-        sine->params().set("phase", M_PI / 2.0);
+        sine->params().set("phase", kPi / 2.0);
         Block* sign = model.addBlock("Sign", 200, 0);
         Block* integrator = model.addBlock("Integrator", 400, 0);
         Block* scope = model.addBlock("Scope", 600, 0);

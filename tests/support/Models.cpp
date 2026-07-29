@@ -1,5 +1,7 @@
 #include "Models.h"
 
+#include <memory>
+
 #include "blocks/SubsystemBlock.h"
 #include "engine/SignalLog.h"
 #include "scripting/PythonEngine.h"
@@ -9,12 +11,23 @@ namespace harness {
 using namespace simupy;
 
 double runToEnd(Model& model, Simulator** out) {
-    static Simulator* keep = nullptr;
-    delete keep;
-    keep = new Simulator(model, pythonExpressionEvaluator());
-    keep->initialize();
-    keep->run();
-    if (out) *out = keep;
+    // Kept alive past the call so `out` stays valid, but dropped the moment a
+    // run throws: the Simulator holds a reference to the caller's Model, which
+    // is usually a local about to go out of scope. Letting a half-initialised
+    // one survive means the next call destroys it — and terminates blocks that
+    // no longer exist.
+    static std::unique_ptr<Simulator> keep;
+
+    keep = std::make_unique<Simulator>(model, pythonExpressionEvaluator());
+    try {
+        keep->initialize();
+        keep->run();
+    } catch (...) {
+        keep.reset();
+        if (out) *out = nullptr;
+        throw;
+    }
+    if (out) *out = keep.get();
 
     const SignalLog& log = keep->log();
     if (log.channels().empty() || log.sampleCount() == 0) return 0.0;

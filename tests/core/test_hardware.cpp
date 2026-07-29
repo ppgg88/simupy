@@ -85,6 +85,20 @@ private:
 
 #endif  // !_WIN32 — the fake board stands on a pty
 
+/// pyserial is optional, and the Arduino blocks are the only thing that needs
+/// it. A runner without it should skip those tests rather than fail them.
+bool pyserialAvailable() {
+    try {
+        // Imported rather than merely located: a module that is present but
+        // fails to load is no more usable than a missing one.
+        const ParamValue found = PythonEngine::instance().evaluateExpression(
+            "__import__('serial') is not None", {}, "pyserial availability");
+        return std::get_if<bool>(&found) && std::get<bool>(found);
+    } catch (const ModelError&) {
+        return false;
+    }
+}
+
 bool loadHardwareLibrary() {
     try {
         LibraryManager::instance().load("libraries/hardware.spylib");
@@ -106,6 +120,11 @@ void testArduinoLoopback() {
 
     if (!loadHardwareLibrary()) {
         check(false, "the shipped hardware library loaded");
+        return;
+    }
+
+    if (!pyserialAvailable()) {
+        check(true, "pyserial is not installed — skipped");
         return;
     }
 
@@ -154,6 +173,11 @@ void testArduinoDigitalAndSharing() {
     beginTest("Digital pins work, and one port means one connection");
 
     if (!loadHardwareLibrary()) return;
+
+    if (!pyserialAvailable()) {
+        check(true, "pyserial is not installed — skipped");
+        return;
+    }
 
     FakeArduino board;
     if (!board.ready()) {

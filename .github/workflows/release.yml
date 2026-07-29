@@ -32,7 +32,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - run: python -m pip install --upgrade pip pybind11 numpy
+      - run: python -m pip install --upgrade pip pybind11 numpy pyserial
 
       - name: Linux system dependencies
         if: runner.os == 'Linux'

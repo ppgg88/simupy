@@ -11,6 +11,9 @@
 
 namespace simupy {
 
+/// MSVC does not define M_PI, and <cmath> is not required to.
+inline constexpr double kPi = 3.14159265358979323846;
+
 using Vec = Eigen::VectorXd;
 using Mat = Eigen::MatrixXd;
 

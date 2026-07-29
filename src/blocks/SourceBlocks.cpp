@@ -87,7 +87,7 @@ public:
             static_cast<int>(std::max(amplitude_.size(), bias_.size()));
         amplitudeVec_ = broadcast(amplitude_, width, "the amplitude");
         biasVec_ = broadcast(bias_, width, "the bias");
-        omega_ = inHertz_ ? 2.0 * M_PI * frequency_ : frequency_;
+        omega_ = inHertz_ ? 2.0 * kPi * frequency_ : frequency_;
         s.outputWidths[0] = width;
     }
 
@@ -174,7 +174,7 @@ public:
 
     void computeOutputs(const EvalContext& c) override {
         const double rate = (f1_ - f0_) / sweepTime_;
-        const double phase = 2.0 * M_PI * (f0_ * c.t + 0.5 * rate * c.t * c.t);
+        const double phase = 2.0 * kPi * (f0_ * c.t + 0.5 * rate * c.t * c.t);
         c.out(0)[0] = amplitude_ * std::sin(phase);
     }
 

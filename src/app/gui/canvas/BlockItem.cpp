@@ -429,7 +429,7 @@ void BlockItem::paintGlyph(QPainter* painter, const QRectF& body) const {
                                     : fraction * fraction;
             const qreal x = body.left() + fraction * body.width();
             const qreal y = body.center().y() -
-                            std::sin(phase * cycles * 2.0 * M_PI) *
+                            std::sin(phase * cycles * 2.0 * kPi) *
                                 body.height() * 0.36;
             if (i == 0) path.moveTo(x, y);
             else path.lineTo(x, y);
@@ -502,7 +502,7 @@ void BlockItem::paintGlyph(QPainter* painter, const QRectF& body) const {
             const qreal fraction = qreal(i) / steps;
             const qreal x = screen.left() + 3 + fraction * (screen.width() - 6);
             const qreal y = screen.center().y() -
-                            std::sin(fraction * 2.4 * M_PI) *
+                            std::sin(fraction * 2.4 * kPi) *
                                 screen.height() * 0.28;
             if (i == 0) trace.moveTo(x, y);
             else trace.lineTo(x, y);
