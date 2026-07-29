@@ -3,11 +3,13 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  # Builds and uploads the assets without publishing, so the pipeline can be
+  # exercised without cutting a release.
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to build, without the leading v"
-        required: true
+        description: "Version to stamp on the packages, without the leading v"
+        default: "0.0.0-dev"
 
 permissions:
   contents: write
@@ -27,6 +29,18 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      # The assets carry the tag, not the version last committed to CMakeLists.
+      - name: Version
+        shell: bash
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="${{ inputs.version }}"
+          fi
+          echo "SIMUPY_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "building $VERSION"
 
       - uses: actions/setup-python@v5
         with:
@@ -94,6 +108,7 @@ jobs:
           fi
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DSIMUPY_VERSION="$SIMUPY_VERSION" \
             -DPython3_EXECUTABLE="$(python -c 'import sys; print(sys.executable.replace(chr(92), "/"))')" \
             $EXTRA
           cmake --build build --parallel
@@ -108,22 +123,19 @@ jobs:
         working-directory: build
         run: cpack -G "TGZ;DEB"
 
-      # windeployqt copies the Qt DLLs and plugins next to the executable, and
-      # the Python DLL goes with them: the application embeds the interpreter,
-      # so without it the package will not start at all.
-      - name: Stage Qt and Python runtime (Windows)
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          windeployqt --release --no-translations --no-system-d3d-compiler \
-            build/bin/simupy.exe
-          PYDLL=$(python -c "import sys; v=sys.version_info; print(f'{sys.base_prefix}/python{v.major}{v.minor}.dll'.replace(chr(92), '/'))")
-          cp "$PYDLL" build/bin/
-
+      # The Qt and Python runtimes come in from install rules, so they land in
+      # the package rather than only beside the build output.
       - name: Package (Windows)
         if: runner.os == 'Windows'
         working-directory: build
         run: cpack -G "ZIP;NSIS"
+
+      # A package missing its runtime still zips up fine and only fails on the
+      # user's machine, so the contents are checked here instead.
+      - name: Verify package contents
+        shell: bash
+        run: |
+          python "$GITHUB_WORKSPACE/tools/check_package.py" build
 
       - name: Collect assets
         shell: bash

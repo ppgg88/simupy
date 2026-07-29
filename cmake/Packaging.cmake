@@ -46,22 +46,71 @@ if(UNIX AND NOT APPLE AND SIMUPY_BUILD_GUI)
             COMPONENT runtime)
 endif()
 
+# CPack packages the install tree, not the build directory, so a windeployqt
+# run against build/bin/simupy.exe would never reach the archive. It has to
+# run against the *installed* executable, which means from an install rule.
+if(WIN32)
+    if(SIMUPY_BUILD_GUI)
+        find_program(SIMUPY_WINDEPLOYQT windeployqt
+                     HINTS "${Qt6_DIR}/../../../bin" "$ENV{QTDIR}/bin")
+        # Missing windeployqt only breaks packaging, never a plain build, so it
+        # is reported now and fatal at install time rather than at configure.
+        if(NOT SIMUPY_WINDEPLOYQT)
+            message(WARNING "windeployqt not found: packaging will fail")
+            install(CODE [[message(FATAL_ERROR
+                "windeployqt not found: the package would ship simupy.exe "
+                "without the Qt runtime and fail to start")]]
+                    COMPONENT runtime)
+        endif()
+        install(CODE "
+            set(_windeployqt \"${SIMUPY_WINDEPLOYQT}\")
+            set(_exe \"\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}/simupy.exe\")"
+                COMPONENT runtime)
+        install(CODE [[
+            execute_process(
+                COMMAND "${_windeployqt}" --release --no-translations
+                        --no-system-d3d-compiler "${_exe}"
+                RESULT_VARIABLE _status)
+            if(NOT _status EQUAL 0)
+                message(FATAL_ERROR "windeployqt failed on ${_exe}")
+            endif()]]
+                COMPONENT runtime)
+    endif()
+
+    # Both executables embed CPython, so its DLL travels with them. It sits
+    # beside the interpreter in every standard Windows install.
+    get_filename_component(_python_dir "${Python3_EXECUTABLE}" DIRECTORY)
+    file(GLOB SIMUPY_PYTHON_DLL "${_python_dir}/python3?.dll"
+                                "${_python_dir}/python3??.dll")
+    if(SIMUPY_PYTHON_DLL)
+        install(FILES ${SIMUPY_PYTHON_DLL}
+                DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT runtime)
+    else()
+        message(WARNING "no pythonXY.dll beside ${Python3_EXECUTABLE}")
+        install(CODE [[message(FATAL_ERROR
+            "no pythonXY.dll found: the package would ship without an "
+            "interpreter and fail to start")]] COMPONENT runtime)
+    endif()
+endif()
+
 set(CPACK_PACKAGE_NAME "simupy")
 set(CPACK_PACKAGE_VENDOR "SimuPy")
-set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
+set(CPACK_PACKAGE_VERSION ${SIMUPY_VERSION})
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
     "Block-diagram simulation with custom blocks written in Python")
 set(CPACK_PACKAGE_INSTALL_DIRECTORY "SimuPy")
 set(CPACK_RESOURCE_FILE_README "${PROJECT_SOURCE_DIR}/README.md")
 set(CPACK_PACKAGE_FILE_NAME
-    "simupy-${PROJECT_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
-set(CPACK_STRIP_FILES ON)
+    "simupy-${SIMUPY_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+if(NOT WIN32)
+    set(CPACK_STRIP_FILES ON)
+endif()
 set(CPACK_VERBATIM_VARIABLES ON)
 
 if(WIN32)
     set(CPACK_GENERATOR "ZIP;NSIS")
     set(CPACK_NSIS_PACKAGE_NAME "SimuPy")
-    set(CPACK_NSIS_DISPLAY_NAME "SimuPy ${PROJECT_VERSION}")
+    set(CPACK_NSIS_DISPLAY_NAME "SimuPy ${SIMUPY_VERSION}")
     set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
     set(CPACK_NSIS_MODIFY_PATH ON)
     if(SIMUPY_BUILD_GUI)

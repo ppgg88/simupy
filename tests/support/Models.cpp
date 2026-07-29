@@ -3,6 +3,7 @@
 #include <memory>
 
 #include "blocks/SubsystemBlock.h"
+#include "engine/RealTimePacer.h"
 #include "engine/SignalLog.h"
 #include "scripting/PythonEngine.h"
 
@@ -10,28 +11,46 @@ namespace harness {
 
 using namespace simupy;
 
-double runToEnd(Model& model, Simulator** out) {
-    // Kept alive past the call so `out` stays valid, but dropped the moment a
-    // run throws: the Simulator holds a reference to the caller's Model, which
-    // is usually a local about to go out of scope. Letting a half-initialised
-    // one survive means the next call destroys it — and terminates blocks that
-    // no longer exist.
-    static std::unique_ptr<Simulator> keep;
+namespace {
 
-    keep = std::make_unique<Simulator>(model, pythonExpressionEvaluator());
+// Kept alive past the call so `out` stays valid, but dropped the moment a run
+// throws: the Simulator holds a reference to the caller's Model, which is
+// usually a local about to go out of scope. Letting a half-initialised one
+// survive means the next call destroys it — and terminates blocks that no
+// longer exist.
+std::unique_ptr<Simulator> g_keep;
+
+template <typename Drive>
+double run(Model& model, Simulator** out, Drive drive) {
+    g_keep = std::make_unique<Simulator>(model, pythonExpressionEvaluator());
     try {
-        keep->initialize();
-        keep->run();
+        g_keep->initialize();
+        drive(*g_keep);
     } catch (...) {
-        keep.reset();
+        g_keep.reset();
         if (out) *out = nullptr;
         throw;
     }
-    if (out) *out = keep.get();
+    if (out) *out = g_keep.get();
 
-    const SignalLog& log = keep->log();
+    const SignalLog& log = g_keep->log();
     if (log.channels().empty() || log.sampleCount() == 0) return 0.0;
     return log.channels().front().at(log.sampleCount() - 1, 0);
+}
+
+}  // namespace
+
+double runToEnd(Model& model, Simulator** out) {
+    return run(model, out, [](Simulator& s) { s.run(); });
+}
+
+double runPaced(Model& model, Simulator** out) {
+    const SolverSettings& settings = model.solver();
+    return run(model, out, [&settings](Simulator& s) {
+        RealTimePacer pacer(settings.startTime, settings.realTimeFactor);
+        while (s.step()) pacer.waitUntil(s.time());
+        s.terminate();
+    });
 }
 
 Block* addAffineSubsystem(Model& model, double x, double y, double gain,

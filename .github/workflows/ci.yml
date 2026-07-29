@@ -147,7 +147,7 @@ jobs:
       - name: The embedded Python API is valid Python
         run: |
           python -m py_compile src/scripting/simupy_api.py
-          python -m py_compile tools/fake_arduino.py
+          python -m py_compile tools/fake_arduino.py tools/check_package.py
           python -m py_compile examples/make_examples.py examples/make_libraries.py
           python -m py_compile cmake/embed_text.py
 

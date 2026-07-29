@@ -24,4 +24,4 @@ simupy_add_library(simupy-scripting
         ${SIMUPY_API_GENERATED}
     PUBLIC SimuPy::simupy-model pybind11::embed)
 
-target_compile_definitions(simupy-scripting PUBLIC SIMUPY_VERSION="${PROJECT_VERSION}")
+target_compile_definitions(simupy-scripting PUBLIC SIMUPY_VERSION="${SIMUPY_VERSION}")

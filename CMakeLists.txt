@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.21)
 project(SimuPy VERSION 0.0.1 LANGUAGES CXX)
 
+# What the binaries report and the packages are named after. A release passes
+# the tag; both have to come from here, or a package ends up named after the
+# tag while the application it contains announces something else.
+set(SIMUPY_VERSION "${PROJECT_VERSION}" CACHE STRING "Version reported and packaged")
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)

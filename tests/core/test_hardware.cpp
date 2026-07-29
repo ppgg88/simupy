@@ -152,14 +152,14 @@ void testArduinoLoopback() {
     model.connect(duty->id(), 0, write->id(), 0);
     model.connect(read->id(), 0, scope->id(), 0);
 
-    // Paced, because the board streams on a wall clock and a run going flat
-    // out would finish before the first sample arrived.
+    // Paced against the wall clock, because the board streams on its own and a
+    // run going flat out finishes before more than a sample or two arrives.
     model.solver().stopTime = 1.0;
     model.solver().maxStep = 0.02;
     model.solver().realTime = true;
     model.solver().realTimeFactor = 1.0;
 
-    const double last = runToEnd(model);
+    const double last = runPaced(model);
 
     check(last != 0.0, "something came back from the board");
     // 0.75 of a 10-bit range is 767 counts, which reads back as 767/1023.
@@ -219,7 +219,7 @@ void testArduinoDigitalAndSharing() {
     model.solver().realTimeFactor = 1.0;
 
     Simulator* simulator = nullptr;
-    runToEnd(model, &simulator);
+    runPaced(model, &simulator);
     if (!simulator) return;
 
     const SignalLog& log = simulator->log();
