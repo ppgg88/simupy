@@ -378,7 +378,14 @@ void testUdpLoopback() {
     model.solver().method = SolverSettings::Method::RK4;
     model.solver().fixedStep = 0.005;
 
-    const double last = runToEnd(model);
+    // Paced, because the datagram is real and needs wall-clock time to cross
+    // the stack. Loopback on Linux hands it over inside the send, so a run
+    // going flat out happens to work there; Windows delivers asynchronously
+    // and a whole flat-out run can finish before the first one lands.
+    model.solver().realTime = true;
+    model.solver().realTimeFactor = 1.0;
+
+    const double last = runPaced(model);
 
     check(last != 0.0,
           "something arrived (the receiver holds zero until it does)");
