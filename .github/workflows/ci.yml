@@ -38,6 +38,12 @@ jobs:
         run: |
           sudo apt-get update
 
+          # Qt6Gui's CMake config requires OpenGL headers via WrapOpenGL.
+          # 24.04 pulls them in as a hard dependency of qt6-base-dev but
+          # 22.04 only recommends them, and --no-install-recommends drops
+          # them, so configure fails on OPENGL_INCLUDE_DIR. Asked for by
+          # name instead of relying on either.
+          #
           # Qt Charts and Qt SVG were renamed between 22.04 (libqt6*6-dev) and
           # 24.04 (qt6-*-dev), and the two names never coexist.
           pick() {
@@ -54,6 +60,7 @@ jobs:
 
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake ninja-build \
+            libgl1-mesa-dev libegl1-mesa-dev \
             qt6-base-dev "$CHARTS" "$SVG" \
             libeigen3-dev nlohmann-json3-dev python3-dev
 

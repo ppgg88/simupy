@@ -68,6 +68,14 @@ def main():
                    if not any(fnmatch.fnmatch(n, p) for n in names)]
         status = "ok" if not missing else "MISSING " + ", ".join(missing)
         print(f"{archive.name}: {len(names)} entries, {status}")
+
+        # Printed only on failure, and only here: knowing a path is absent is
+        # useless without knowing what took its place.
+        if missing:
+            print("  what the archive actually holds:")
+            for name in sorted(names):
+                print(f"    {name}")
+
         failures += [(archive.name, p) for p in missing]
 
     if failures:
