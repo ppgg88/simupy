@@ -142,6 +142,15 @@ jobs:
         with:
           python-version: "3.12"
 
+      # Now that the block API is a real .py file rather than a C++ string,
+      # it can be checked like one.
+      - name: The embedded Python API is valid Python
+        run: |
+          python -m py_compile src/scripting/simupy_api.py
+          python -m py_compile tools/fake_arduino.py
+          python -m py_compile examples/make_examples.py examples/make_libraries.py
+          python -m py_compile cmake/embed_text.py
+
       # The example models and the hardware library are generated. A change to
       # the generator that was never run leaves the two disagreeing, and the
       # difference only shows up when someone opens a stale file.
