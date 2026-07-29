@@ -52,9 +52,26 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
+
+          # Qt Charts and Qt SVG were renamed between 22.04 (libqt6*6-dev) and
+          # 24.04 (qt6-*-dev), and the two names never coexist. Resolving them
+          # against the archive keeps this working whichever image the runner
+          # label points at.
+          pick() {
+            for candidate in "$@"; do
+              if apt-cache show "$candidate" 2>/dev/null | grep -q '^Package:'; then
+                echo "$candidate"; return 0
+              fi
+            done
+            echo "none of these exist here: $*" >&2; return 1
+          }
+          CHARTS=$(pick qt6-charts-dev libqt6charts6-dev)
+          SVG=$(pick qt6-svg-dev libqt6svg6-dev)
+          echo "using $CHARTS and $SVG"
+
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake ninja-build file \
-            qt6-base-dev qt6-charts-dev qt6-svg-dev \
+            qt6-base-dev "$CHARTS" "$SVG" \
             libeigen3-dev nlohmann-json3-dev python3-dev
 
       - name: Qt

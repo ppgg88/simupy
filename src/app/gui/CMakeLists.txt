@@ -4,7 +4,15 @@ find_package(Qt6 6.2 REQUIRED COMPONENTS Core Gui Widgets Charts)
 # and only one of the three icon kinds depends on it.
 find_package(Qt6 6.2 QUIET COMPONENTS Svg)
 
-qt_standard_project_setup()
+# Only since Qt 6.3, and 6.2 is the floor the README promises — Ubuntu 22.04
+# still ships 6.2. All this project needs from it is the automatic tooling.
+if(COMMAND qt_standard_project_setup)
+    qt_standard_project_setup()
+else()
+    set(CMAKE_AUTOMOC ON)
+    set(CMAKE_AUTOUIC ON)
+    set(CMAKE_AUTORCC ON)
+endif()
 
 # The interface is a library so the tests can drive the very same windows the
 # application builds.
