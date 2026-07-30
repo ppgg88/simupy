@@ -14,6 +14,7 @@ class QHBoxLayout;
 class QLabel;
 class QLineEdit;
 class QProgressBar;
+class QTimer;
 QT_END_NAMESPACE
 
 namespace simupy {
@@ -50,6 +51,11 @@ public:
 
     void reportLibraryProblem(const QString& message);
 
+    /// Writes the model back to its own file every 30 seconds while it has
+    /// unsaved edits. Off until asked for, and remembered between sessions.
+    void setAutosaveEnabled(bool enabled);
+    bool isAutosaveEnabled() const;
+
 public slots:
     void openSelectedSubsystem();
     void leaveSubsystem();
@@ -64,6 +70,7 @@ private slots:
     void open();
     bool save();
     bool saveAs();
+    void autosave();
 
     void saveSelectionAsCustomBlock();
     void editCustomBlock(const QString& typeName);
@@ -89,6 +96,7 @@ private:
     void buildDocks();
     void buildStatusBar();
 
+    bool writeModel(const QString& path, QString* error);
     void setCurrentFile(const QString& path);
     void setDirty(bool dirty);
     bool confirmDiscardChanges();
@@ -138,9 +146,13 @@ private:
     QString currentFile_;
     bool dirty_ = false;
 
+    QTimer* autosaveTimer_ = nullptr;
+    QString autosaveError_;
+
     QAction* runAction_ = nullptr;
     QAction* stopAction_ = nullptr;
     QAction* saveAction_ = nullptr;
+    QAction* autosaveAction_ = nullptr;
     QAction* newAction_ = nullptr;
     QAction* realTimeAction_ = nullptr;
     QAction* unboundedAction_ = nullptr;

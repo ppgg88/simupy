@@ -35,8 +35,11 @@
 #include <QProgressBar>
 #include <QRegularExpression>
 #include <QScreen>
+#include <QSettings>
 #include <QStatusBar>
 #include <QTextBrowser>
+#include <QTime>
+#include <QTimer>
 #include <QToolBar>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -45,6 +48,9 @@ namespace simupy {
 namespace {
 
 constexpr const char* kFileFilter = "SimuPy models (*.spy);;All files (*)";
+
+constexpr int kAutosaveIntervalMs = 30000;
+constexpr const char* kAutosaveSetting = "editor/autosave";
 
 }  // namespace
 
@@ -129,6 +135,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     refreshControlPanel();
     onSelectionChanged();
 
+    autosaveAction_->setChecked(
+        QSettings().value(QLatin1String(kAutosaveSetting), false).toBool());
+
     console_->appendMessage(
         tr("SimuPy ready — Python %1, %2 block types available.")
             .arg(QString::fromStdString(PythonEngine::instance().version()))
@@ -164,6 +173,18 @@ void MainWindow::buildActions() {
     saveAction_->setToolTip(tr("Save (Ctrl+S)"));
     connect(saveAction_, &QAction::triggered, this, &MainWindow::save);
 
+    autosaveAction_ = new QAction(tr("Auto&save every 30 seconds"), this);
+    autosaveAction_->setCheckable(true);
+    autosaveAction_->setStatusTip(
+        tr("Write the model back to its own file every 30 seconds while it "
+           "has unsaved edits"));
+    connect(autosaveAction_, &QAction::toggled, this,
+            &MainWindow::setAutosaveEnabled);
+
+    autosaveTimer_ = new QTimer(this);
+    autosaveTimer_->setInterval(kAutosaveIntervalMs);
+    connect(autosaveTimer_, &QTimer::timeout, this, &MainWindow::autosave);
+
     newAction_ = new QAction(appicons::newModel(), tr("&New"), this);
     newAction_->setShortcut(QKeySequence::New);
     newAction_->setStatusTip(tr("Start an empty model"));
@@ -188,6 +209,9 @@ void MainWindow::buildMenus() {
         fileMenu->addAction(appicons::save(), tr("Save &As…"));
     saveAsAction->setShortcut(QKeySequence::SaveAs);
     connect(saveAsAction, &QAction::triggered, this, &MainWindow::saveAs);
+
+    fileMenu->addSeparator();
+    fileMenu->addAction(autosaveAction_);
 
     fileMenu->addSeparator();
     QAction* quitAction = fileMenu->addAction(tr("&Quit"));
@@ -671,21 +695,79 @@ bool MainWindow::openFile(const QString& path) {
     return true;
 }
 
-bool MainWindow::save() {
-    if (currentFile_.isEmpty()) return saveAs();
-
+bool MainWindow::writeModel(const QString& path, QString* error) {
     if (controls_ && !controller_->isBusy()) controls_->commitValues();
 
     try {
-        ModelSerializer::save(model_, currentFile_.toStdString());
-    } catch (const ModelError& error) {
-        QMessageBox::critical(this, tr("Could not save"),
-                              QString::fromStdString(error.what()));
+        ModelSerializer::save(model_, path.toStdString());
+    } catch (const ModelError& failure) {
+        if (error) *error = QString::fromStdString(failure.what());
         return false;
     }
     setDirty(false);
+    return true;
+}
+
+bool MainWindow::save() {
+    if (currentFile_.isEmpty()) return saveAs();
+
+    QString error;
+    if (!writeModel(currentFile_, &error)) {
+        QMessageBox::critical(this, tr("Could not save"), error);
+        return false;
+    }
+    autosaveError_.clear();
     statusLabel_->setText(tr("Saved %1").arg(QFileInfo(currentFile_).fileName()));
     return true;
+}
+
+void MainWindow::setAutosaveEnabled(bool enabled) {
+    // The menu entry is the switch, so keep the two in step whichever side
+    // was flipped; setChecked comes back through here once and then stops.
+    if (autosaveAction_ && autosaveAction_->isChecked() != enabled) {
+        autosaveAction_->setChecked(enabled);
+        return;
+    }
+
+    if (enabled)
+        autosaveTimer_->start();
+    else
+        autosaveTimer_->stop();
+
+    QSettings().setValue(QLatin1String(kAutosaveSetting), enabled);
+
+    if (enabled && currentFile_.isEmpty() && statusLabel_) {
+        statusLabel_->setText(
+            tr("Autosave on — it starts once the model has a file"));
+    }
+}
+
+bool MainWindow::isAutosaveEnabled() const {
+    return autosaveTimer_ != nullptr && autosaveTimer_->isActive();
+}
+
+void MainWindow::autosave() {
+    // Nothing to write, nowhere to write it — autosave never opens a Save As
+    // dialog — or a run is reading the model. Try again on the next tick.
+    if (!dirty_ || currentFile_.isEmpty() || controller_->isBusy()) return;
+
+    QString error;
+    if (!writeModel(currentFile_, &error)) {
+        // A modal box every 30 seconds would be unusable, so report the
+        // failure to the console once and leave the edits in memory: the
+        // window still shows them as unsaved.
+        if (error != autosaveError_) {
+            autosaveError_ = error;
+            console_->appendMessage(tr("Autosave failed — %1").arg(error));
+        }
+        return;
+    }
+
+    autosaveError_.clear();
+    statusLabel_->setText(
+        tr("Autosaved %1 at %2")
+            .arg(QFileInfo(currentFile_).fileName(),
+                 QTime::currentTime().toString(QStringLiteral("HH:mm"))));
 }
 
 bool MainWindow::saveAs() {

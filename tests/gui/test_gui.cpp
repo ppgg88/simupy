@@ -26,13 +26,16 @@
 #include <QCheckBox>
 #include <QClipboard>
 #include <QDockWidget>
+#include <QFile>
 #include <QFileInfo>
+#include <QSettings>
 #include <QPushButton>
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QElapsedTimer>
 #include <QListWidget>
 #include <QSlider>
+#include <QTemporaryDir>
 #include <QTest>
 #include <QThread>
 
@@ -968,6 +971,69 @@ void testLockedSceneStillDrivesControls() {
     check(model.blocks().empty(), "unlocking restores editing");
 }
 
+/// Autosave writes the model back to its own file on its own, and — the part
+/// that would be unusable if it were wrong — never asks a question to do it.
+void testAutosaveWritesTheFile(const QString& modelPath) {
+    beginTest("Autosave writes the open file by itself");
+
+    QTemporaryDir dir;
+    check(dir.isValid(), "a scratch directory for the copy");
+    if (!dir.isValid()) return;
+
+    const QString path = dir.filePath(QStringLiteral("autosave.spy"));
+    check(QFile::copy(modelPath, path), "the example is copied into it");
+
+    MainWindow window;
+    if (!window.openFile(path)) {
+        check(false, "the copy opened");
+        return;
+    }
+
+    check(!window.isAutosaveEnabled(), "autosave starts off");
+    window.setAutosaveEnabled(true);
+    check(window.isAutosaveEnabled(), "and turns on");
+
+    const std::size_t before = window.scene()->model().blocks().size();
+    window.scene()->addBlock(QStringLiteral("Gain"), QPointF(600, 400));
+    QApplication::processEvents();
+    check(window.windowTitle().contains(QLatin1Char('*')),
+          "an edit marks the model unsaved");
+
+    // The timer's 30 seconds are not worth waiting for; fire what it fires.
+    QMetaObject::invokeMethod(&window, "autosave");
+    QApplication::processEvents();
+
+    check(!window.windowTitle().contains(QLatin1Char('*')),
+          "autosaving clears the unsaved marker");
+
+    Model reloaded;
+    ModelSerializer::load(reloaded, path.toStdString());
+    check(reloaded.blocks().size() == before + 1,
+          "and the file on disk has the new block");
+
+    // Nothing to save must stay a no-op: a second tick cannot fail or spin.
+    QMetaObject::invokeMethod(&window, "autosave");
+    QApplication::processEvents();
+    check(!window.windowTitle().contains(QLatin1Char('*')),
+          "a tick with nothing to write does nothing");
+
+    window.setAutosaveEnabled(false);
+    check(!window.isAutosaveEnabled(), "and it can be turned back off");
+
+    // An untitled model has no file to write to. Autosave must leave it
+    // alone rather than open Save As — a dialog nobody asked for, every 30
+    // seconds, would be worse than no autosave at all.
+    MainWindow untitled;
+    untitled.setAutosaveEnabled(true);
+    untitled.scene()->addBlock(QStringLiteral("Gain"), QPointF(0, 0));
+    QApplication::processEvents();
+    QMetaObject::invokeMethod(&untitled, "autosave");
+    QApplication::processEvents();
+    check(untitled.windowTitle().contains(QLatin1Char('*')),
+          "an untitled model stays unsaved, with no dialog");
+    untitled.setAutosaveEnabled(false);
+}
+
 /// The ∞ toggle has to reach the solver settings and the stop-time field.
 void testUnboundedToggle() {
     beginTest("The infinity toggle drops the stop time");
@@ -1186,6 +1252,13 @@ int main(int argc, char** argv) {
     qputenv("QT_QPA_PLATFORM", "offscreen");
     QApplication app(argc, argv);
 
+    // Settings the window remembers (autosave) belong to the run, not to
+    // whoever is running it: keep them in a directory we throw away.
+    QTemporaryDir settingsDir;
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
+                       settingsDir.path());
+
     std::cout << "SimuPy interface tests\n\n";
     registerBuiltinBlocks();
 
@@ -1222,6 +1295,7 @@ int main(int argc, char** argv) {
     testControlsOnTheCanvas();
     testLockedSceneStillDrivesControls();
     testUnboundedToggle();
+    testAutosaveWritesTheFile(modelPath);
     testScopePlacement(modelPath);
     testWireFieldPenalties();
     testWiresTakeSeparateLanes();

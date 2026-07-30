@@ -85,6 +85,20 @@ Navigating
    * - :kbd:`Ctrl+0`
      - Actual size.
 
+Saving
+======
+
+:kbd:`Ctrl+S` saves, :kbd:`Ctrl+Shift+S` saves under a new name. The title bar
+carries a ``*`` while the model has edits that are not on disk yet.
+
+:menuselection:`File --> Autosave every 30 seconds` writes the model back to
+its own file every 30 seconds, but only while there is something to write. It
+stays out of the way in three cases: a model that has never been saved is left
+alone rather than raising a :guilabel:`Save As` dialog, a run in flight is
+allowed to finish its tick first, and a write that fails is reported in the
+Console instead of a dialog every half minute — the edits stay in memory and
+the ``*`` stays up. The setting is remembered between sessions.
+
 Running
 =======
 
