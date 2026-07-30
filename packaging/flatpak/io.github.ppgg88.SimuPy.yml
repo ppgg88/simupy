@@ -1,0 +1,112 @@
+# Flatpak manifest for SimuPy.
+#
+#   flatpak-builder --user --force-clean --install build-dir \
+#       packaging/flatpak/io.github.ppgg88.SimuPy.yml
+#
+# The KDE runtime is used for Qt 6 — Widgets, Charts and Svg all come from
+# it. Everything else the build needs (Eigen, nlohmann/json, pybind11) is a
+# header-only module built here and thrown away afterwards, and the two
+# Python packages the blocks import at run time (NumPy, pyserial) are
+# installed from pinned wheels: the build sandbox has no network, so nothing
+# may be resolved at build time.
+id: io.github.ppgg88.SimuPy
+runtime: org.kde.Platform
+runtime-version: '6.9'
+sdk: org.kde.Sdk
+command: simupy
+
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  # Models are the user's own files, opened and saved wherever they keep them.
+  - --filesystem=home
+  # The UDP source and sink blocks talk to whatever is on the other end.
+  - --share=network
+  # Serial ports for the Arduino and serial blocks. Flatpak has no narrower
+  # permission for /dev/ttyUSB*, so this is the price of those blocks
+  # working; drop it with `flatpak override --nodevice=all` if you never use
+  # them.
+  - --device=all
+
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  - /lib/cmake
+  - /share/cmake
+  - /share/pkgconfig
+  - '*.a'
+  - '*.la'
+
+modules:
+  - name: eigen
+    buildsystem: cmake-ninja
+    builddir: true
+    config-opts:
+      - -DBUILD_TESTING=OFF
+      - -DEIGEN_BUILD_DOC=OFF
+    # Headers only, and only while compiling.
+    cleanup: ['*']
+    sources:
+      - type: archive
+        url: https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.gz
+        sha256: 8586084f71f9bde545ee7fa6d00288b264a2b7ac3607b974e54d13e7162c1c72
+
+  - name: nlohmann-json
+    buildsystem: cmake-ninja
+    builddir: true
+    config-opts:
+      - -DJSON_BuildTests=OFF
+    cleanup: ['*']
+    sources:
+      - type: archive
+        url: https://github.com/nlohmann/json/archive/refs/tags/v3.11.3.tar.gz
+        sha256: 0d8ef5af7f9794e3263480193c491549b2ba6cc74bb018906202ada498a79406
+
+  - name: pybind11
+    buildsystem: cmake-ninja
+    builddir: true
+    config-opts:
+      - -DPYBIND11_TEST=OFF
+      - -DPYBIND11_FINDPYTHON=ON
+    cleanup: ['*']
+    sources:
+      - type: archive
+        url: https://github.com/pybind/pybind11/archive/refs/tags/v2.13.6.tar.gz
+        sha256: e08cb87f4773da97fa7b5f035de8763abc656d87d5773e62f6da0587d1f0ec20
+
+  # The embedded interpreter is the runtime's own Python 3.12, which already
+  # has /app/lib/python3.12/site-packages on its path, so these land where a
+  # Python block will find them.
+  - name: python3-modules
+    buildsystem: simple
+    build-commands:
+      - pip3 install --no-index --no-deps --prefix=${FLATPAK_DEST}
+        --find-links="file://${PWD}" numpy pyserial
+    sources:
+      - type: file
+        url: https://files.pythonhosted.org/packages/b8/a9/6e73d68500f80773f65f0654ea932019d6694329a0eb0ed0533de38df376/numpy-2.5.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+        sha256: 59fda5e192b570217ec2580c96f00e9a7e12ef6866a900eb089b62c1a32545ca
+      - type: file
+        url: https://files.pythonhosted.org/packages/07/bc/587a445451b253b285629263eb51c2d8e9bcea4fc97826266d186f96f558/pyserial-3.5-py2.py3-none-any.whl
+        sha256: c4451db6ba391ca6ca299fb3ec7bae67a5c55dde170964c7a14ceefec02f2cf0
+
+  - name: simupy
+    buildsystem: cmake-ninja
+    builddir: true
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      # The suite is run against the native build in CI; running it again
+      # here would only add the sandbox's quirks to the picture.
+      - -DSIMUPY_BUILD_TESTS=OFF
+      # Rewritten by .github/workflows/release.yml for a tagged build.
+      - -DSIMUPY_VERSION=0.0.1
+    sources:
+      - type: dir
+        path: ../..
+        skip:
+          - .git
+          - build
+          - build-headless
+          - .flatpak-builder

@@ -26,6 +26,14 @@ cmake --build build -j$(nproc)
 
 Point at the canvas, start typing, pick a block. Press **F5**.
 
+Or install a release without building anything — Linux releases ship a
+Flatpak bundle:
+
+```sh
+flatpak install --user ./simupy-*-x86_64.flatpak
+flatpak run io.github.ppgg88.SimuPy
+```
+
 ## What it does
 
 - Variable- and fixed-step solvers, with **event location** so a switching

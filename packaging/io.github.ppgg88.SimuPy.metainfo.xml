@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.ppgg88.SimuPy</id>
+
+  <name>SimuPy</name>
+  <summary>Block-diagram simulation with blocks written in Python</summary>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <!-- No LICENSE file has been added to the repository yet, so nothing is
+       granted beyond ordinary copyright. Change this once one is chosen. -->
+  <project_license>LicenseRef-proprietary</project_license>
+
+  <developer id="io.github.ppgg88">
+    <name>SimuPy</name>
+  </developer>
+
+  <description>
+    <p>
+      SimuPy is a block-diagram simulator in the spirit of Simulink. The
+      engine, the editor and the solvers are C++; when a diagram needs
+      behaviour no built-in block provides, you drop in a Python block and
+      write it as a small class — no plugin to compile and no restart, since
+      the script is recompiled at the start of every run.
+    </p>
+    <p>Included:</p>
+    <ul>
+      <li>Continuous, discrete, routing, control and hardware blocks</li>
+      <li>Fixed and adaptive solvers, event location and algebraic loops</li>
+      <li>Subsystems with masks, and libraries of reusable custom blocks</li>
+      <li>Live scopes, interactive controls and real-time or unbounded runs</li>
+      <li>A command-line runner for batch simulation and CSV output</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">io.github.ppgg88.SimuPy.desktop</launchable>
+
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/ppgg88/simupy/main/docs/_static/editor.png</image>
+      <caption>The editor with a control loop and a live scope</caption>
+    </screenshot>
+  </screenshots>
+
+  <url type="homepage">https://github.com/ppgg88/simupy</url>
+  <url type="bugtracker">https://github.com/ppgg88/simupy/issues</url>
+
+  <content_rating type="oars-1.1"/>
+
+  <provides>
+    <binary>simupy</binary>
+    <binary>simupy-cli</binary>
+  </provides>
+
+  <releases>
+    <!-- The release workflow rewrites the first entry for a tagged build. -->
+    <release version="0.0.1" date="2026-07-30">
+      <description>
+        <p>Development build.</p>
+      </description>
+    </release>
+  </releases>
+</component>

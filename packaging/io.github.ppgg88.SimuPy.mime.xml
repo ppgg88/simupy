@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Makes a .spy file something the desktop can hand to SimuPy. The glob is
+     the whole of it: the format is JSON, so content sniffing would claim
+     every JSON document on the machine. -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-simupy-model">
+    <comment>SimuPy model</comment>
+    <sub-class-of type="application/json"/>
+    <icon name="io.github.ppgg88.SimuPy"/>
+    <glob pattern="*.spy"/>
+  </mime-type>
+</mime-info>

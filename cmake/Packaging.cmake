@@ -40,9 +40,28 @@ install(FILES ${PROJECT_SOURCE_DIR}/README.md
         DESTINATION ${CMAKE_INSTALL_DOCDIR}
         COMPONENT runtime)
 
+# Desktop entry, icon, AppStream data and MIME definition all carry the
+# application ID as their file name. Flatpak refuses to export anything that
+# does not, and reverse-DNS names are what freedesktop asks for elsewhere too.
+set(SIMUPY_APP_ID "io.github.ppgg88.SimuPy")
+
 if(UNIX AND NOT APPLE AND SIMUPY_BUILD_GUI)
-    install(FILES ${PROJECT_SOURCE_DIR}/packaging/simupy.desktop
+    install(FILES ${PROJECT_SOURCE_DIR}/packaging/${SIMUPY_APP_ID}.desktop
             DESTINATION ${CMAKE_INSTALL_DATADIR}/applications
+            COMPONENT runtime)
+
+    install(FILES ${PROJECT_SOURCE_DIR}/packaging/${SIMUPY_APP_ID}.metainfo.xml
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo
+            COMPONENT runtime)
+
+    # shared-mime-info expects the bare ID with no second extension.
+    install(FILES ${PROJECT_SOURCE_DIR}/packaging/${SIMUPY_APP_ID}.mime.xml
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/mime/packages
+            RENAME ${SIMUPY_APP_ID}.xml
+            COMPONENT runtime)
+
+    install(FILES ${PROJECT_SOURCE_DIR}/resources/icons/${SIMUPY_APP_ID}.svg
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps
             COMPONENT runtime)
 endif()
 

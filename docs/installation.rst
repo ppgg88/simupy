@@ -5,25 +5,31 @@ Installation
 From a release
 ==============
 
-.. list-table::
-   :header-rows: 1
-   :widths: 22 78
+Releases ship a single Linux artefact: a Flatpak bundle.
 
-   * - Platform
-     - Install
-   * - Debian, Ubuntu
-     - ``sudo apt install ./simupy_*_amd64.deb`` — Qt, Python and NumPy come
-       in as dependencies.
-   * - Any Linux
-     - Unpack the ``.tar.gz``. Needs Qt 6.2+, Python 3.8+ and NumPy already
-       present.
-   * - Windows
-     - Run the ``.exe`` installer, or unpack the ``.zip`` to run in place. Qt
-       and the Python runtime are bundled; install NumPy with
-       ``pip install numpy``.
+.. code-block:: console
 
-``pyserial`` is only needed for the Arduino and serial blocks — see
-:doc:`guide/hardware`.
+   $ flatpak install --user ./simupy-*-x86_64.flatpak
+   $ flatpak run io.github.ppgg88.SimuPy
+
+It needs Flatpak with the `Flathub <https://flathub.org/setup>`_ remote
+configured, because the KDE 6.9 runtime that provides Qt comes from there.
+Everything else — Python 3.12, NumPy, ``pyserial`` — is inside the bundle or
+its runtime, so nothing has to be installed alongside.
+
+The sandbox is given your home directory (models are your files), the network
+(the UDP blocks) and device access (the serial and Arduino blocks; see
+:doc:`guide/hardware`). If you never touch hardware, take the last one back
+with ``flatpak override --user --nodevice=all io.github.ppgg88.SimuPy``.
+
+The command-line runner travels in the same bundle:
+
+.. code-block:: console
+
+   $ flatpak run --command=simupy-cli io.github.ppgg88.SimuPy run model.spy
+
+Windows packaging is not built at the moment. Building from source works
+there as it always did, but nothing is published for it.
 
 Building from source
 ====================
@@ -118,23 +124,51 @@ text field.
 Packaging
 =========
 
+The Flatpak
+-----------
+
 .. code-block:: console
 
-   $ cd build && cpack -G "TGZ;DEB"     # Linux
-   $ cd build && cpack -G "ZIP;NSIS"    # Windows
+   $ flatpak install flathub org.flatpak.Builder
+   $ flatpak run org.flatpak.Builder --user --force-clean --install \
+         build-dir packaging/flatpak/io.github.ppgg88.SimuPy.yml
+
+The manifest builds against the KDE 6.9 runtime, which supplies Qt. Eigen,
+nlohmann/json and pybind11 are built from pinned source archives and thrown
+away after the compile; NumPy and ``pyserial`` are installed from pinned
+wheels, because the build sandbox has no network and nothing may be resolved
+while it runs.
+
+.. note::
+
+   ``flatpak-builder`` running inside its own sandbox has a private ``/tmp``.
+   Keep the build directory, the state directory and the repository somewhere
+   under ``$HOME``, or the build fails with *"build directory not
+   initialized"*.
+
+Distribution packages
+---------------------
+
+CPack still produces a tarball and a Debian package from the same install
+tree, and nothing in the release pipeline uses them:
+
+.. code-block:: console
+
+   $ cd build && cpack -G "TGZ;DEB"
 
 The ``.deb`` declares its dependencies, Qt and NumPy included, because the
-application embeds CPython and will not run a Python block without it. The
-Windows packages bundle Qt and the Python DLL instead; NumPy still has to be
-installed with pip.
+application embeds CPython and will not run a Python block without it.
 
 Continuous integration
 ----------------------
 
-Tagging ``v*`` runs ``.github/workflows/release.yml``: build, test and package
-on both platforms, then attach the assets and their checksums to a GitHub
-release.
+Every push runs ``.github/workflows/ci.yml``: build and test on Ubuntu 24.04,
+a headless build to prove the engine still compiles without Qt, the Flatpak
+built and then *installed and run*, the documentation built with warnings as
+errors, and a check that the generated examples and libraries still match
+their generators.
 
-Every other push runs ``ci.yml`` — the same build and tests on Linux and
-Windows, a headless build to prove the engine still compiles without Qt, and a
-check that the generated examples and libraries match their generators.
+Tagging ``v*`` runs ``release.yml``: the test suite, then the version stamped
+onto the manifest and the AppStream data by ``tools/stamp_version.py``, then
+the same Flatpak build, the same smoke test, and finally the bundle and its
+checksum attached to a GitHub release. Both are Linux-only.

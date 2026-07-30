@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- SimuPy: two blocks, a signal between them, and the feedback path that
+       makes it a loop. Drawn in the accent blue the application uses. -->
+  <rect width="128" height="128" rx="28" fill="#1b2029"/>
+
+  <g fill="none" stroke="#4d9dff" stroke-width="5"
+     stroke-linecap="round" stroke-linejoin="round">
+    <!-- source block, with a step -->
+    <rect x="16" y="40" width="34" height="34" rx="8"/>
+    <path d="M24 62 h9 v-11 h9" stroke-width="4"/>
+
+    <!-- the signal between them -->
+    <path d="M50 57 h14"/>
+    <path d="M64 51 l10 6 -10 6 z" fill="#4d9dff"/>
+
+    <!-- plant block, with its response -->
+    <rect x="78" y="40" width="34" height="34" rx="8"/>
+    <path d="M85 63 q6 -14 12 -6 t10 -10" stroke-width="4"/>
+
+    <!-- feedback, back around to the input -->
+    <path d="M95 74 v22 H33 v-16"/>
+    <path d="M27 84 l6 -10 6 10 z" fill="#4d9dff"/>
+  </g>
+</svg>

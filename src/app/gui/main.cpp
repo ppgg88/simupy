@@ -7,6 +7,7 @@
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QDir>
+#include <QIcon>
 #include <QMessageBox>
 #include <QSplashScreen>
 #include <QStandardPaths>
@@ -17,6 +18,12 @@ int main(int argc, char** argv) {
     QApplication::setApplicationName(QStringLiteral("SimuPy"));
     QApplication::setApplicationVersion(QStringLiteral(SIMUPY_VERSION));
     QApplication::setOrganizationName(QStringLiteral("SimuPy"));
+
+    // How a Wayland compositor — and a Flatpak sandbox — tie the window back
+    // to its desktop entry, and so to its icon and its name in the dock.
+    QApplication::setDesktopFileName(QStringLiteral("io.github.ppgg88.SimuPy"));
+    QApplication::setWindowIcon(
+        QIcon::fromTheme(QStringLiteral("io.github.ppgg88.SimuPy")));
 
     QCommandLineParser parser;
     parser.setApplicationDescription(
