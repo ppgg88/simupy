@@ -6,8 +6,7 @@
   <summary>Block-diagram simulation with blocks written in Python</summary>
 
   <metadata_license>CC0-1.0</metadata_license>
-  <!-- No LICENSE file in the repository yet. -->
-  <project_license>LicenseRef-proprietary</project_license>
+  <project_license>GPL-3.0-or-later</project_license>
 
   <developer id="io.github.ppgg88">
     <name>SimuPy</name>

@@ -103,3 +103,14 @@ build without an interpreter, and all of it without Qt. See
 | `python_discrete_controller.spy` | A 50 Hz Python PI controller driving a continuous C++ plant |
 | `subsystem_controller.spy` | The same loop with the controller folded into a subsystem |
 | `live_controls.spy` | A real-time loop steered from the Controls dock while it runs |
+
+## License
+
+SimuPy is free software: you may redistribute it and modify it under the terms
+of the **GNU General Public License** as published by the Free Software
+Foundation, either version 3 of the licence, or (at your option) any later
+version. The full text is in [LICENSE](LICENSE).
+
+It is distributed in the hope that it will be useful, but **without any
+warranty**; without even the implied warranty of merchantability or fitness for
+a particular purpose.

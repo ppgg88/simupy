@@ -51,6 +51,8 @@ public:
 
     void reportLibraryProblem(const QString& message);
 
+    static QString aboutHtml();
+
     void setAutosaveEnabled(bool enabled);
     bool isAutosaveEnabled() const;
 
@@ -111,6 +113,7 @@ private:
     void setScopeAlwaysOnTop(const QString& path, bool onTop);
     void editPythonSource(const QString& blockId, const QString& paramName);
     void showBlockReference();
+    void showAbout();
 
     void enterSubsystem(Block* subsystem);
     void navigateTo(int depth);

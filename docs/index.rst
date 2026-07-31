@@ -68,6 +68,19 @@ loop.
 
    limitations
 
+License
+=======
+
+SimuPy is free software: you may redistribute it and modify it under the terms
+of the GNU General Public License as published by the Free Software Foundation,
+either version 3 of the licence, or (at your option) any later version. The
+full text ships with every copy, in the ``LICENSE`` file and, once installed,
+under ``share/doc/simupy``.
+
+It is distributed in the hope that it will be useful, but **without any
+warranty**; without even the implied warranty of merchantability or fitness for
+a particular purpose.
+
 Indices
 =======
 

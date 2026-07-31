@@ -883,6 +883,29 @@ void testLockedSceneStillDrivesControls() {
 
 /// A parameter of a kind the block cannot read must not take the window down:
 /// drawing it is a report, not a crash.
+void testAboutNamesTheLicence() {
+    beginTest("The About box carries the licence and the project links");
+
+    const QString about = MainWindow::aboutHtml();
+
+    check(about.contains(QStringLiteral("GNU")) &&
+              about.contains(QStringLiteral("General Public License")),
+          "it names the licence");
+    check(about.contains(QStringLiteral("version 3")) &&
+              about.contains(QStringLiteral("any later version")),
+          "including which version, and that later ones are allowed");
+    check(about.contains(QStringLiteral("no warranty")),
+          "and the absence of warranty the licence asks to be shown");
+    check(about.contains(QStringLiteral("Copyright")),
+          "with a copyright line");
+    check(about.contains(QStringLiteral("github.com/ppgg88/simupy\"")) &&
+              about.contains(QStringLiteral("/issues")),
+          "and links to the project and its bug tracker");
+    check(about.contains(QApplication::applicationVersion()) ||
+              QApplication::applicationVersion().isEmpty(),
+          "next to the version it is built from");
+}
+
 void testUnreadableParameterDoesNotCrash() {
     beginTest("A block with an unreadable parameter still draws");
 
@@ -1402,6 +1425,7 @@ int main(int argc, char** argv) {
     testLockedSceneStillDrivesControls();
     testUnboundedToggle();
     testAutosaveWritesTheFile(modelPath);
+    testAboutNamesTheLicence();
     testUnreadableParameterDoesNotCrash();
     testBlockInspector();
     testWireDropZone();

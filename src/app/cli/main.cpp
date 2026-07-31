@@ -38,6 +38,9 @@ Options for `run`:
                       is simulated seconds per real second (default 1)
   --unbounded         run until interrupted (Ctrl+C) rather than to a stop time
   --quiet             only report errors
+
+Free software under the GNU General Public License, version 3 or, at your
+option, any later version. There is no warranty; see the LICENSE file.
 )";
 }
 
