@@ -399,18 +399,40 @@ void MainWindow::buildMenus() {
             &MainWindow::showBlockReference);
 
     QAction* about = helpMenu->addAction(tr("&About SimuPy"));
-    connect(about, &QAction::triggered, this, [this] {
-        QMessageBox::about(
-            this, tr("About SimuPy"),
-            tr("<h3>SimuPy %3</h3>"
-               "<p>Block-diagram simulation with custom blocks written in "
-               "Python.</p>"
-               "<p>Engine in C++ with Eigen; Python %1 embedded through "
-               "pybind11; interface in Qt %2.</p>")
-                .arg(QString::fromStdString(PythonEngine::instance().version()),
-                     QLatin1String(qVersion()),
-                     QApplication::applicationVersion()));
-    });
+    connect(about, &QAction::triggered, this, &MainWindow::showAbout);
+}
+
+QString MainWindow::aboutHtml() {
+    return tr("<h3>SimuPy %3</h3>"
+              "<p>Block-diagram simulation with custom blocks written in "
+              "Python.</p>"
+              "<p>Engine in C++ with Eigen; Python %1 embedded through "
+              "pybind11; interface in Qt %2.</p>"
+              "<p>Copyright © 2026 SimuPy contributors.</p>"
+              "<p>Free software under the "
+              "<a href=\"https://www.gnu.org/licenses/gpl-3.0.html\">GNU "
+              "General Public License</a>, either version 3 or, at your "
+              "option, any later version. There is <b>no warranty</b>, to the "
+              "extent permitted by law.</p>"
+              "<p><a href=\"https://github.com/ppgg88/simupy\">Project "
+              "page</a> · "
+              "<a href=\"https://github.com/ppgg88/simupy/issues\">Report a "
+              "problem</a></p>")
+        .arg(QString::fromStdString(PythonEngine::instance().version()),
+             QLatin1String(qVersion()), QApplication::applicationVersion());
+}
+
+void MainWindow::showAbout() {
+    QMessageBox box(this);
+    box.setWindowTitle(tr("About SimuPy"));
+    box.setTextFormat(Qt::RichText);
+    box.setIconPixmap(QApplication::windowIcon().pixmap(64, 64));
+    box.setText(aboutHtml());
+
+    // QMessageBox leaves its label inert, so the links would not open.
+    if (auto* label = box.findChild<QLabel*>(QStringLiteral("qt_msgbox_label")))
+        label->setOpenExternalLinks(true);
+    box.exec();
 }
 
 void MainWindow::buildToolBar() {

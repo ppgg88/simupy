@@ -6,7 +6,7 @@
 
 project = "SimuPy"
 author = "SimuPy"
-copyright = "SimuPy"
+copyright = "2026 SimuPy contributors, GPL-3.0-or-later"
 release = "0.0.1"
 version = release
 
