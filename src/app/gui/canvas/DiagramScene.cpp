@@ -473,6 +473,10 @@ void DiagramScene::applySignalWidths(const CompiledModel& compiled) {
     }
 }
 
+void DiagramScene::refreshValues() {
+    for (BlockItem* item : std::as_const(blockItems_)) item->refreshValue();
+}
+
 void DiagramScene::clearSignalWidths() {
     for (WireItem* wire : wireItems_) wire->setSignalWidth(0);
 }

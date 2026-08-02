@@ -4,6 +4,7 @@
 #include "app/gui/style/Theme.h"
 #include "io/CustomBlock.h"
 #include "blocks/ControlBlocks.h"
+#include "blocks/SinkBlocks.h"
 
 #include <QGraphicsScene>
 #include <QCursor>
@@ -98,6 +99,10 @@ BlockItem::BlockItem(Model& model, Block* block, QGraphicsItem* parent)
     refresh();
     const BlockGeometry& geometry = model_.geometry(block_->id());
     setPos(geometry.x, geometry.y);
+}
+
+void BlockItem::refreshValue() {
+    if (isDisplay(block_)) update();
 }
 
 void BlockItem::refresh() {
@@ -263,7 +268,8 @@ void BlockItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*,
     painter->drawRoundedRect(body, kCornerRadius, kCornerRadius);
 
     painter->setPen(colors.blockGlyph);
-    paintGlyph(painter, body.adjusted(6, 5, -6, -5));
+    if (isDisplay(block_)) paintReadout(painter, body.adjusted(4, 3, -4, -3));
+    else paintGlyph(painter, body.adjusted(6, 5, -6, -5));
 
     paintPorts(painter);
 
@@ -284,6 +290,47 @@ void BlockItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*,
         painter->setPen(Qt::NoPen);
         painter->drawEllipse(QPointF(body.right() - 5, body.top() + 5), 4, 4);
     }
+}
+
+void BlockItem::paintReadout(QPainter* painter, const QRectF& body) const {
+    const Vec value = displayedValue(block_);
+
+    QFont font = painter->font();
+    font.setBold(true);
+
+    if (value.size() == 0) {
+        painter->setFont(font);
+        painter->drawText(body, Qt::AlignCenter, QStringLiteral("—"));
+        return;
+    }
+
+    QStringList numbers;
+    for (Eigen::Index i = 0; i < value.size(); ++i)
+        numbers << QString::number(value[i], 'g', 5);
+
+    // Shrink until the whole signal fits. A signal too wide even for the
+    // smallest type is cut short and says so, rather than clipping in silence.
+    QStringList lines;
+    for (int size = 11; size >= 5; --size) {
+        font.setPointSize(size);
+        const QFontMetricsF metrics(font);
+
+        const int capacity =
+            std::max(1, static_cast<int>(body.height() / metrics.height()));
+        lines = numbers;
+        if (lines.size() > capacity) {
+            lines = numbers.mid(0, std::max(1, capacity - 1));
+            lines << tr("+%1 more").arg(numbers.size() - lines.size());
+        }
+
+        qreal widest = 0.0;
+        for (const QString& line : std::as_const(lines))
+            widest = std::max(widest, metrics.horizontalAdvance(line));
+        if (widest <= body.width() && lines.size() == numbers.size()) break;
+    }
+
+    painter->setFont(font);
+    painter->drawText(body, Qt::AlignCenter, lines.join(QLatin1Char('\n')));
 }
 
 void BlockItem::paintPorts(QPainter* painter) const {

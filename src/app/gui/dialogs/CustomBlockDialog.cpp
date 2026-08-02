@@ -1,4 +1,5 @@
 #include "CustomBlockDialog.h"
+#include "app/gui/NumberInput.h"
 
 #include "app/gui/style/BlockIconRenderer.h"
 #include "app/gui/style/Theme.h"
@@ -104,8 +105,9 @@ bool textToDefault(const QString& text, ParamSpec::Kind kind, ParamValue* out) {
         case ParamSpec::Kind::Integer:
         default: {
             bool ok = false;
-            const double value = text.trimmed().isEmpty() ? 0.0
-                                                          : text.toDouble(&ok);
+            const double value = text.trimmed().isEmpty()
+                                     ? 0.0
+                                     : numbers::parse(text, &ok);
             if (!text.trimmed().isEmpty() && !ok) return false;
             *out = value;
             return true;

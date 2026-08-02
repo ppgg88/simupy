@@ -3,6 +3,7 @@
 #include "app/gui/style/Theme.h"
 
 #include <QCheckBox>
+#include <QDoubleSpinBox>
 #include <QChart>
 #include <QChartView>
 #include <QFileDialog>
@@ -15,6 +16,7 @@
 #include <QValueAxis>
 #include <QVBoxLayout>
 
+#include <algorithm>
 #include <fstream>
 #include <limits>
 
@@ -72,6 +74,23 @@ ScopeWindow::ScopeWindow(QString blockId, QString title, QWidget* parent)
     autoScaleBox_->setChecked(true);
     connect(autoScaleBox_, &QCheckBox::toggled, this, [this] { rescale(); });
 
+    windowBox_ = new QDoubleSpinBox(this);
+    windowBox_->setRange(0.0, 1e6);
+    windowBox_->setDecimals(2);
+    windowBox_->setSingleStep(1.0);
+    windowBox_->setSuffix(tr(" s"));
+    windowBox_->setSpecialValueText(tr("Whole run"));
+    windowBox_->setToolTip(
+        tr("Seconds of history kept on screen. The axis then holds that width "
+           "and the trace scrolls through it while the model runs."));
+    connect(windowBox_, &QDoubleSpinBox::valueChanged, this,
+            [this](double seconds) {
+                if (qFuzzyCompare(window_ + 1.0, seconds + 1.0)) return;
+                window_ = seconds;
+                if (log_) setLog(log_);
+                emit timeWindowChanged(seconds);
+            });
+
     auto* resetButton = new QPushButton(tr("Reset zoom"), this);
     connect(resetButton, &QPushButton::clicked, this, [this] {
         chart_->zoomReset();
@@ -105,6 +124,8 @@ ScopeWindow::ScopeWindow(QString blockId, QString title, QWidget* parent)
     auto* controls = new QHBoxLayout;
     controls->setContentsMargins(0, 0, 0, 0);
     controls->addWidget(autoScaleBox_);
+    controls->addWidget(new QLabel(tr("Window"), this));
+    controls->addWidget(windowBox_);
     controls->addWidget(resetButton);
     controls->addStretch(1);
     controls->addWidget(info_);
@@ -129,6 +150,29 @@ void ScopeWindow::setPlacement(bool docked, bool alwaysOnTop) {
     dockButton_->setText(docked ? tr("Undock") : tr("Dock"));
     onTopBox_->setChecked(alwaysOnTop);
     onTopBox_->setEnabled(!docked);
+}
+
+void ScopeWindow::setTimeWindow(double seconds) {
+    window_ = std::max(0.0, seconds);
+    QSignalBlocker guard(windowBox_);
+    windowBox_->setValue(window_);
+    if (log_) setLog(log_);
+}
+
+double ScopeWindow::windowEnd() const {
+    const std::vector<double>& times = log_->times();
+    return std::max(times.back(), times.front() + window_);
+}
+
+int ScopeWindow::firstVisibleSample() const {
+    if (window_ <= 0.0 || !log_ || log_->sampleCount() == 0) return 0;
+
+    const std::vector<double>& times = log_->times();
+    const double start = windowEnd() - window_;
+    const auto it = std::lower_bound(times.begin(), times.end(), start);
+    // One sample earlier, so the trace enters the axis rather than starting on it.
+    const int index = static_cast<int>(it - times.begin());
+    return std::max(0, index - 1);
 }
 
 void ScopeWindow::setYRange(bool autoScale, double minimum, double maximum) {
@@ -184,17 +228,19 @@ void ScopeWindow::setLog(const SignalLogPtr& log) {
     }
 
     const int sampleCount = log_->sampleCount();
-    const int stride = std::max(1, sampleCount / kMaxPlottedPoints);
+    const int first = firstVisibleSample();
+    const int visible = sampleCount - first;
+    const int stride = std::max(1, visible / kMaxPlottedPoints);
     const std::vector<double>& times = log_->times();
 
     int seriesIndex = 0;
     for (const LogChannel* channel : channels) {
         for (int c = 0; c < channel->width; ++c) {
             QList<QPointF> points;
-            points.reserve(sampleCount / stride + 2);
-            for (int i = 0; i < sampleCount; i += stride)
+            points.reserve(visible / stride + 2);
+            for (int i = first; i < sampleCount; i += stride)
                 points.append(QPointF(times[i], channel->at(i, c)));
-            if ((sampleCount - 1) % stride != 0)
+            if ((sampleCount - 1 - first) % stride != 0)
                 points.append(QPointF(times[sampleCount - 1],
                                       channel->at(sampleCount - 1, c)));
 
@@ -204,9 +250,14 @@ void ScopeWindow::setLog(const SignalLogPtr& log) {
         }
     }
 
-    info_->setText(tr("%1 samples · %2 signals")
-                       .arg(sampleCount)
-                       .arg(series_.size()));
+    info_->setText(window_ > 0.0
+                       ? tr("%1 of %2 samples · %3 signals")
+                             .arg(visible)
+                             .arg(sampleCount)
+                             .arg(series_.size())
+                       : tr("%1 samples · %2 signals")
+                             .arg(sampleCount)
+                             .arg(series_.size()));
     rescale();
 }
 
@@ -214,7 +265,13 @@ void ScopeWindow::rescale() {
     if (!log_ || log_->sampleCount() == 0) return;
 
     const std::vector<double>& times = log_->times();
-    axisX_->setRange(times.front(), std::max(times.back(), times.front() + 1e-9));
+    if (window_ > 0.0) {
+        const double end = windowEnd();
+        axisX_->setRange(end - window_, end);
+    } else {
+        axisX_->setRange(times.front(),
+                         std::max(times.back(), times.front() + 1e-9));
+    }
 
     if (!autoScaleBox_->isChecked()) {
         axisY_->setRange(yMin_, yMax_);

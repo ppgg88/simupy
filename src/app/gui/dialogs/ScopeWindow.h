@@ -7,6 +7,7 @@
 QT_BEGIN_NAMESPACE
 class QCheckBox;
 class QLabel;
+class QDoubleSpinBox;
 class QPushButton;
 QT_END_NAMESPACE
 
@@ -30,16 +31,22 @@ public:
 
     void setYRange(bool autoScale, double minimum, double maximum);
 
+    /// Seconds of history to keep on screen; 0 shows the whole run.
+    void setTimeWindow(double seconds);
+
     void setPlacement(bool docked, bool alwaysOnTop);
 
 signals:
     void dockRequested(bool docked);
     void alwaysOnTopRequested(bool onTop);
+    void timeWindowChanged(double seconds);
 
 private:
     void exportCsv();
     void exportImage();
     void rescale();
+    int firstVisibleSample() const;
+    double windowEnd() const;
 
     QString blockId_;
     SignalLogPtr log_;
@@ -51,9 +58,11 @@ private:
     QList<QLineSeries*> series_;
 
     QCheckBox* autoScaleBox_;
+    QDoubleSpinBox* windowBox_;
     QCheckBox* onTopBox_;
     QPushButton* dockButton_;
     QLabel* info_;
+    double window_ = 0.0;
     double yMin_ = -1.0;
     double yMax_ = 1.0;
 };

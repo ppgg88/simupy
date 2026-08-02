@@ -199,6 +199,160 @@ private:
     int order_ = 1;
 };
 
+/// Online identification of an order-N transfer function. The weights live in
+/// the discrete state, so they evolve with the run and rewind with a reset.
+class DiscreteAdaptiveTransferFcnBlock : public Block {
+public:
+    PortLayout ports() const override { return {{"u", "d"}, {"y", "e", "w"}}; }
+
+    void setup(BlockSetup& s) override {
+        order_ = params().integer("order", 2);
+        if (order_ < 1) throw ModelError("the model order must be at least 1");
+
+        directTerm_ = params().boolean("directTerm", false);
+        leastSquares_ = params().text("algorithm", "nlms") == "rls";
+        outputError_ = params().text("feedback", "measured") == "model";
+
+        stepSize_ = params().real("stepSize", 0.1);
+        epsilon_ = params().real("regularization", 1e-6);
+        forgetting_ = params().real("forgettingFactor", 0.99);
+        covariance_ = params().real("initialCovariance", 1000.0);
+
+        if (stepSize_ <= 0.0)
+            throw ModelError("the step size must be strictly positive");
+        if (epsilon_ <= 0.0)
+            throw ModelError("the regularisation must be strictly positive");
+        if (forgetting_ <= 0.0 || forgetting_ > 1.0)
+            throw ModelError("the forgetting factor must lie in (0, 1]");
+        if (covariance_ <= 0.0)
+            throw ModelError("the initial covariance must be strictly "
+                             "positive");
+
+        weights_ = 2 * order_ + (directTerm_ ? 1 : 0);
+        initial_ = broadcast(params().vector("initialWeights", {0.0}), weights_,
+                             "the initial weights");
+        phi_.resize(weights_);
+
+        s.outputWidths[0] = 1;
+        s.outputWidths[1] = 1;
+        s.outputWidths[2] = weights_;
+        s.discreteStates =
+            weights_ + 2 * order_ + (leastSquares_ ? weights_ * weights_ : 0);
+        s.sampleTime = requireSampleTime(params());
+        s.directFeedthrough[0] = directTerm_;
+        s.directFeedthrough[1] = true;
+    }
+
+    void initialize(Eigen::Ref<Vec> xc, Eigen::Ref<Vec> xd) override {
+        (void)xc;
+        xd.setZero();
+        xd.head(weights_) = initial_;
+        if (leastSquares_)
+            for (int i = 0; i < weights_; ++i)
+                xd[covarianceOffset() + i * weights_ + i] = covariance_;
+    }
+
+    void computeOutputs(const EvalContext& c) override {
+        buildRegressor(c.xd, scalar(c, 0));
+        const double prediction = theta(c.xd).dot(phi_);
+
+        c.out(0)[0] = prediction;
+        c.out(1)[0] = scalar(c, 1) - prediction;
+        c.out(2) = theta(c.xd);
+    }
+
+    void updateDiscrete(const EvalContext& c, Eigen::Ref<Vec> xdNext) override {
+        const double u = scalar(c, 0);
+        const double d = scalar(c, 1);
+
+        buildRegressor(c.xd, u);
+        const Eigen::Map<const Vec> current = theta(c.xd);
+        const double prediction = current.dot(phi_);
+        const double error = d - prediction;
+
+        Eigen::Ref<Vec> updated = xdNext.head(weights_);
+        updated = current;
+        if (leastSquares_) {
+            adaptLeastSquares(c.xd, error, xdNext);
+        } else {
+            const double norm = epsilon_ + phi_.squaredNorm();
+            updated += (stepSize_ * error / norm) * phi_;
+        }
+
+        // A diverging run must not poison the weights for good.
+        if (!updated.allFinite()) updated = current;
+
+        shiftHistory(c.xd, xdNext, u, outputError_ ? prediction : d);
+    }
+
+private:
+    static double scalar(const EvalContext& c, int port) {
+        const Vec& u = c.in(port);
+        return u.size() > 0 ? u[0] : 0.0;
+    }
+
+    Eigen::Map<const Vec> theta(const double* xd) const {
+        return Eigen::Map<const Vec>(xd, weights_);
+    }
+
+    int outputHistoryOffset() const { return weights_; }
+    int inputHistoryOffset() const { return weights_ + order_; }
+    int covarianceOffset() const { return weights_ + 2 * order_; }
+
+    /// phi = [-y(k-1)..-y(k-N), u(k), u(k-1)..u(k-N)], matching
+    /// theta = [a1..aN, b0, b1..bN] so that A(z) y = B(z) u.
+    void buildRegressor(const double* xd, double u) {
+        const double* pastOutputs = xd + outputHistoryOffset();
+        const double* pastInputs = xd + inputHistoryOffset();
+
+        int index = 0;
+        for (int i = 0; i < order_; ++i) phi_[index++] = -pastOutputs[i];
+        if (directTerm_) phi_[index++] = u;
+        for (int i = 0; i < order_; ++i) phi_[index++] = pastInputs[i];
+    }
+
+    void adaptLeastSquares(const double* xd, double error,
+                           Eigen::Ref<Vec> xdNext) {
+        const int offset = covarianceOffset();
+        const int entries = weights_ * weights_;
+        Eigen::Map<const Mat> p(xd + offset, weights_, weights_);
+
+        const Vec pPhi = p * phi_;
+        const double denominator = forgetting_ + phi_.dot(pPhi);
+        if (!(std::abs(denominator) > 1e-12)) {
+            xdNext.segment(offset, entries) =
+                Eigen::Map<const Vec>(xd + offset, entries);
+            return;
+        }
+
+        const Vec gain = pPhi / denominator;
+        xdNext.head(weights_) += gain * error;
+
+        Mat next = (p - gain * pPhi.transpose()) / forgetting_;
+        next = 0.5 * (next + next.transpose()).eval();
+        if (!next.allFinite()) next = p;
+        Eigen::Map<Mat>(xdNext.data() + offset, weights_, weights_) = next;
+    }
+
+    void shiftHistory(const double* xd, Eigen::Ref<Vec> xdNext, double u,
+                      double y) const {
+        const int outputs = outputHistoryOffset();
+        const int inputs = inputHistoryOffset();
+        for (int i = order_ - 1; i > 0; --i) {
+            xdNext[outputs + i] = xd[outputs + i - 1];
+            xdNext[inputs + i] = xd[inputs + i - 1];
+        }
+        xdNext[outputs] = y;
+        xdNext[inputs] = u;
+    }
+
+    Vec initial_, phi_;
+    int order_ = 2, weights_ = 4;
+    double stepSize_ = 0.1, epsilon_ = 1e-6;
+    double forgetting_ = 0.99, covariance_ = 1000.0;
+    bool directTerm_ = false, leastSquares_ = false, outputError_ = false;
+};
+
 class IntegerDelayBlock : public Block {
 public:
     PortLayout ports() const override { return {{"in"}, {"out"}}; }
@@ -277,6 +431,43 @@ void registerDiscreteBlocks() {
                      "Ascending powers of z^-1."),
          realParam("sampleTime", "Sample time (s)", 0.1)},
         110.0, 60.0);
+
+    registerBlockType<DiscreteAdaptiveTransferFcnBlock>(
+        "DiscreteAdaptiveTransferFcn", "Discrete",
+        "Fits an order-N transfer function to a measured signal while the "
+        "model runs.",
+        {intParam("order", "Model order N", 2, 1, 64,
+                  "Number of poles. The block adapts N denominator "
+                  "coefficients and N (or N+1) numerator coefficients."),
+         realParam("sampleTime", "Sample time (s)", 0.1),
+         choiceParam("algorithm", "Adaptation", {"nlms", "rls"},
+                     std::string("nlms"),
+                     "nlms: normalised gradient descent, cheap and forgiving. "
+                     "rls: recursive least squares, converges in far fewer "
+                     "samples but costs N^2 per step."),
+         realParam("stepSize", "NLMS step size", 0.1,
+                   "0 < mu < 2. Larger tracks faster and rattles more."),
+         realParam("regularization", "NLMS regularisation", 1e-6,
+                   "Keeps the normalisation finite while the input is quiet."),
+         realParam("forgettingFactor", "RLS forgetting factor", 0.99,
+                   "0 < lambda <= 1. Below 1 the fit tracks a drifting plant; "
+                   "1 weighs every past sample equally."),
+         realParam("initialCovariance", "RLS initial covariance", 1000.0,
+                   "How far the weights may move early on: large means the "
+                   "initial guess is not trusted."),
+         boolParam("directTerm", "Adapt a direct term (b0)", false,
+                   "On when the plant responds within the same sample. Off "
+                   "keeps the block free of direct feedthrough on u."),
+         choiceParam("feedback", "Regressor feedback", {"measured", "model"},
+                     std::string("measured"),
+                     "measured: the regressor uses past d, so y is a one step "
+                     "ahead prediction that cannot run away. model: the "
+                     "regressor uses past y, so y is a free running "
+                     "simulation, closer to the final transfer function but "
+                     "able to diverge."),
+         vectorParam("initialWeights", "Initial weights", {0.0},
+                     "[a1..aN, b0, b1..bN], matching the w output.")},
+        130.0, 90.0);
 
     registerBlockType<IntegerDelayBlock>(
         "IntegerDelay", "Discrete", "Delays the signal by N sample periods.",

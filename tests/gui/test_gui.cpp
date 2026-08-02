@@ -2,6 +2,7 @@
 #include "model/BlockRegistry.h"
 #include "io/CustomBlock.h"
 #include "blocks/ControlBlocks.h"
+#include "blocks/SinkBlocks.h"
 #include "blocks/SubsystemBlock.h"
 #include "app/gui/style/AppIcons.h"
 #include "app/gui/canvas/BlockItem.h"
@@ -11,6 +12,7 @@
 #include "app/gui/MainWindow.h"
 #include "app/gui/canvas/QuickAddPopup.h"
 #include "app/gui/dialogs/BlockInspector.h"
+#include "app/gui/NumberInput.h"
 #include "app/gui/panels/PropertyPanel.h"
 #include "app/gui/dialogs/ScopeWindow.h"
 #include "app/gui/canvas/WireItem.h"
@@ -24,9 +26,14 @@
 #include <QDialogButtonBox>
 #include <QDockWidget>
 #include <QGroupBox>
+#include <QChart>
+#include <QChartView>
+#include <QValueAxis>
 #include <QPainter>
 #include <QPixmap>
+#include <QFormLayout>
 #include <QLabel>
+#include <QLocale>
 #include <QFile>
 #include <QFileInfo>
 #include <QSettings>
@@ -654,6 +661,173 @@ void testToolbarIconsDrawSomething() {
           "a disabled icon is visibly faded");
 }
 
+QImage renderAround(DiagramScene& scene, BlockItem* item) {
+    QImage image(140, 100, QImage::Format_ARGB32);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    scene.render(&painter, QRectF(image.rect()), item->sceneBoundingRect());
+    return image;
+}
+
+QLineEdit* fieldLabelled(PropertyPanel* panel, const QString& label) {
+    auto* form = panel->findChild<QFormLayout*>();
+    if (!form) return nullptr;
+    for (int row = 0; row < form->rowCount(); ++row) {
+        QLayoutItem* name = form->itemAt(row, QFormLayout::LabelRole);
+        QLayoutItem* field = form->itemAt(row, QFormLayout::FieldRole);
+        if (!name || !field || !field->widget()) continue;
+        auto* text = qobject_cast<QLabel*>(name->widget());
+        if (!text || text->text() != label) continue;
+        if (auto* line = qobject_cast<QLineEdit*>(field->widget())) return line;
+        return field->widget()->findChild<QLineEdit*>();
+    }
+    return nullptr;
+}
+
+void testDecimalEntryUnderACommaLocale() {
+    beginTest("Decimal fields take a point and a comma alike");
+
+    // A French locale wants a decimal comma, while the model files and every
+    // parser behind them speak decimal point.
+    const QLocale previous = QLocale();
+    QLocale::setDefault(QLocale(QLocale::French, QLocale::France));
+
+    check(numbers::format(0.25) == QStringLiteral("0.25"),
+          "values are always written with a point");
+
+    bool ok = false;
+    checkClose(numbers::parse(QStringLiteral("0.25"), &ok), 0.25, "point read");
+    check(ok, "and accepted");
+    checkClose(numbers::parse(QStringLiteral("1,5"), &ok), 1.5, "comma read");
+    check(ok, "and accepted too");
+    numbers::parse(QStringLiteral("hello"), &ok);
+    check(!ok, "nonsense is still refused");
+
+    Model model;
+    Block* block = model.addBlock("PID", 0, 0);
+
+    PropertyPanel panel;
+    panel.setBlock(&model, block);
+
+    QLineEdit* field = fieldLabelled(&panel, QStringLiteral("Proportional gain"));
+    check(field != nullptr, "the panel built a field for the gain");
+    if (!field) {
+        QLocale::setDefault(previous);
+        return;
+    }
+
+    field->clear();
+    QTest::keyClicks(field, QStringLiteral("0.25"));
+    check(field->text() == QStringLiteral("0.25"),
+          "a typed decimal point is not swallowed by the validator");
+    QTest::keyClick(field, Qt::Key_Return);
+    checkClose(block->params().real("P"), 0.25, "and it reaches the block");
+
+    field->clear();
+    QTest::keyClicks(field, QStringLiteral("1,5"));
+    check(field->text() == QStringLiteral("1,5"),
+          "a typed comma stays put while editing");
+    QTest::keyClick(field, Qt::Key_Return);
+    checkClose(block->params().real("P"), 1.5, "a comma means the same value");
+    check(field->text() == QStringLiteral("1.5"),
+          "and the field settles on a point");
+
+    field->clear();
+    QTest::keyClicks(field, QStringLiteral("2.5e-3"));
+    QTest::keyClick(field, Qt::Key_Return);
+    checkClose(block->params().real("P"), 2.5e-3, "exponents still work");
+
+    // The stop time sits on the toolbar and gets edited more than anything.
+    MainWindow window;
+    QLineEdit* stopTime = nullptr;
+    for (QLineEdit* candidate : window.findChildren<QLineEdit*>())
+        if (candidate->toolTip().contains(QStringLiteral("simulate")))
+            stopTime = candidate;
+    check(stopTime != nullptr, "the toolbar has a stop time field");
+    if (stopTime) {
+        stopTime->clear();
+        QTest::keyClicks(stopTime, QStringLiteral("2.5"));
+        QTest::keyClick(stopTime, Qt::Key_Return);
+        checkClose(window.scene()->model().solver().stopTime, 2.5,
+                   "a decimal stop time is kept");
+    }
+
+    QLocale::setDefault(previous);
+}
+
+void testDisplayShowsItsValue() {
+    beginTest("Display paints the value it is given");
+
+    Model model;
+    DiagramScene scene(model);
+
+    BlockItem* item = scene.addBlock(QStringLiteral("Display"), QPointF(0, 0));
+    check(item != nullptr, "the Display block lands on the canvas");
+    if (!item) return;
+
+    auto* sink = dynamic_cast<DisplaySink*>(item->block());
+    check(sink != nullptr, "the block exposes a value to the interface");
+    if (!sink) return;
+
+    const QImage blank = renderAround(scene, item);
+
+    sink->publish(Vec::Constant(1, 42.0));
+    item->refreshValue();
+    const QImage shown = renderAround(scene, item);
+    check(shown != blank, "a value repaints the block");
+
+    sink->publish(Vec::Constant(1, -7.25));
+    item->refreshValue();
+    const QImage changed = renderAround(scene, item);
+    check(changed != shown, "a different value paints differently");
+
+    Vec wide(3);
+    wide << 1.0, 2.0, 3.0;
+    sink->publish(wide);
+    item->refreshValue();
+    check(renderAround(scene, item) != changed, "a vector paints differently");
+}
+
+void testDisplayFollowsARun() {
+    beginTest("Display ends a run holding the last value");
+
+    MainWindow window;
+    window.show();
+    QApplication::processEvents();
+
+    DiagramScene* scene = window.scene();
+    Model& model = scene->model();
+
+    const QString sourceId =
+        scene->addBlock(QStringLiteral("Constant"), QPointF(0, 0))->blockId();
+    const QString displayId =
+        scene->addBlock(QStringLiteral("Display"), QPointF(300, 0))->blockId();
+
+    model.block(sourceId.toStdString())
+        ->params()
+        .set("value", std::vector<double>{12.5});
+    model.connect(sourceId.toStdString(), 0, displayId.toStdString(), 0);
+    model.solver().stopTime = 0.2;
+
+    scene->rebuild();
+    QApplication::processEvents();
+
+    window.startSimulation();
+
+    QElapsedTimer clock;
+    clock.start();
+    while (clock.elapsed() < 5000 && window.isRunning()) {
+        QApplication::processEvents();
+        QThread::msleep(5);
+    }
+    check(!window.isRunning(), "the run finished");
+
+    const Vec shown = displayedValue(model.block(displayId.toStdString()));
+    check(shown.size() == 1, "the display holds a scalar");
+    if (shown.size() != 1) return;
+    checkClose(shown[0], 12.5, "and it is the value that was wired in");
+}
+
 void testControlDrivesALiveRun() {
     beginTest("Dragging a slider steers a running model");
 
@@ -883,6 +1057,62 @@ void testLockedSceneStillDrivesControls() {
 
 /// A parameter of a kind the block cannot read must not take the window down:
 /// drawing it is a report, not a crash.
+void testScopeTimeWindow() {
+    beginTest("A scope can hold a fixed width and scroll through it");
+
+    auto log = std::make_shared<SignalLog>();
+    LogChannel channel;
+    channel.blockPath = "Scope";
+    channel.blockName = "Scope";
+    channel.portName = "in";
+    channel.width = 1;
+    log->configure({channel}, 100000);
+
+    auto record = [&log](double t) {
+        Vec value(1);
+        value[0] = std::sin(t);
+        log->append(t, {&value});
+    };
+    for (int i = 0; i <= 200; ++i) record(i * 0.1);
+
+    ScopeWindow scope(QStringLiteral("Scope"), QStringLiteral("Scope"));
+    scope.resize(600, 400);
+    scope.show();
+    scope.setLog(log);
+    QApplication::processEvents();
+
+    auto axis = [&scope]() -> QValueAxis* {
+        auto* view = scope.findChild<QChartView*>();
+        if (!view || !view->chart()) return nullptr;
+        const QList<QAbstractAxis*> axes = view->chart()->axes(Qt::Horizontal);
+        return axes.isEmpty() ? nullptr
+                              : qobject_cast<QValueAxis*>(axes.first());
+    };
+    check(axis() != nullptr, "the plot has a time axis");
+    if (!axis()) return;
+
+    checkClose(axis()->max() - axis()->min(), 20.0,
+               "the whole run spans the axis to begin with");
+
+    scope.setTimeWindow(5.0);
+    QApplication::processEvents();
+    checkClose(axis()->max() - axis()->min(), 5.0, "asking for 5 s fixes the width");
+    checkClose(axis()->max(), 20.0, "ending on the newest sample");
+    checkClose(axis()->min(), 15.0, "so only the last five seconds show");
+
+    // Another second of run: the window keeps its width and slides along.
+    for (int i = 201; i <= 210; ++i) record(i * 0.1);
+    scope.setLog(log);
+    QApplication::processEvents();
+    checkClose(axis()->max() - axis()->min(), 5.0, "the width does not drift");
+    checkClose(axis()->max(), 21.0, "and the axis follows the newest sample");
+
+    scope.setTimeWindow(0.0);
+    QApplication::processEvents();
+    checkClose(axis()->min(), 0.0, "back to the whole run when it is turned off");
+    checkClose(axis()->max(), 21.0, "from the first sample to the last");
+}
+
 void testAboutNamesTheLicence() {
     beginTest("The About box carries the licence and the project links");
 
@@ -1420,11 +1650,15 @@ int main(int argc, char** argv) {
     testCanvasShortcutsStayOnTheCanvas();
     testDeleteRemovesSelection();
     testToolbarIconsDrawSomething();
+    testDecimalEntryUnderACommaLocale();
+    testDisplayShowsItsValue();
+    testDisplayFollowsARun();
     testControlDrivesALiveRun();
     testControlsOnTheCanvas();
     testLockedSceneStillDrivesControls();
     testUnboundedToggle();
     testAutosaveWritesTheFile(modelPath);
+    testScopeTimeWindow();
     testAboutNamesTheLicence();
     testUnreadableParameterDoesNotCrash();
     testBlockInspector();

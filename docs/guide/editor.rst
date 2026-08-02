@@ -133,3 +133,14 @@ A plot opens as its own window. Two buttons decide where it lives:
 
 Each plot decides for itself, and either can also be dragged into place by its
 title bar.
+
+:guilabel:`Window` sets how many seconds of history stay on screen. At
+:guilabel:`Whole run` the axis grows with the run, as it always did; at any
+other value the time axis **holds that width** and the trace scrolls through
+it, which is what makes a long or unbounded run readable — the last few seconds
+stay the same size instead of being squeezed into an ever-wider axis. The
+vertical auto-scale then follows the visible stretch alone, so an early spike
+no longer flattens what is happening now.
+
+The setting belongs to the Scope block, under :guilabel:`Time window (s)`, so
+it is saved with the model and can also be typed in the block's own window.

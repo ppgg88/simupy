@@ -3,6 +3,7 @@
 #include "support/Models.h"
 
 #include "blocks/ControlBlocks.h"
+#include "blocks/SinkBlocks.h"
 #include "blocks/SubsystemBlock.h"
 #include "engine/RealTimePacer.h"
 #include "engine/Simulator.h"
@@ -533,6 +534,290 @@ void testSwitchEventTiming() {
     checkClose(runToEnd(model), 1.0, 1e-9, "integral across the changeover");
 }
 
+// y(k) = 0.7 y(k-1) + 0.5 u(k-1), so the weights [a1, b1] settle at
+// [-0.7, 0.5]. A white input keeps both directions excited.
+static void runIdentification(const std::string& algorithm,
+                              const std::string& feedback, double tolerance) {
+    Model model;
+    Block* noise = model.addBlock("RandomNumber", 0, 0);
+    noise->params().set("sampleTime", 0.05);
+    noise->params().set("seed", 7.0);
+
+    Block* plant = model.addBlock("DiscreteTransferFcn", 200, 0);
+    plant->params().set("numerator", std::vector<double>{0.0, 0.5});
+    plant->params().set("denominator", std::vector<double>{1.0, -0.7});
+    plant->params().set("sampleTime", 0.05);
+
+    Block* fit = model.addBlock("DiscreteAdaptiveTransferFcn", 400, 0);
+    fit->params().set("order", 1.0);
+    fit->params().set("sampleTime", 0.05);
+    fit->params().set("algorithm", algorithm);
+    fit->params().set("feedback", feedback);
+    fit->params().set("stepSize", 0.5);
+
+    const std::string what = algorithm + "/" + feedback;
+    Block* scope = model.addBlock("Scope", 600, 0);
+
+    model.connect(noise->id(), 0, plant->id(), 0);
+    model.connect(noise->id(), 0, fit->id(), 0);
+    model.connect(plant->id(), 0, fit->id(), 1);
+    model.connect(fit->id(), 2, scope->id(), 0);
+
+    model.solver().stopTime = 60.0;
+
+    Simulator* simulator = nullptr;
+    runToEnd(model, &simulator);
+
+    const SignalLog& log = simulator->log();
+    const LogChannel& weights = log.channels().front();
+    check(weights.width == 2, what + ": the w output carries 2N weights");
+
+    const int last = log.sampleCount() - 1;
+    checkClose(weights.at(last, 0), -0.7, tolerance, what + ": a1");
+    checkClose(weights.at(last, 1), 0.5, tolerance, what + ": b1");
+}
+
+void testDiscreteAdaptiveTransferFcnConverges() {
+    beginTest("Adaptive transfer function recovers the plant it watches");
+
+    runIdentification("rls", "measured", 1e-6);
+    runIdentification("nlms", "measured", 5e-3);
+    runIdentification("rls", "model", 1e-6);
+    runIdentification("nlms", "model", 5e-3);
+}
+
+void testDiscreteAdaptiveTransferFcnDirectTerm() {
+    beginTest("Adaptive transfer function picks up a same-sample response");
+
+    Model model;
+    Block* noise = model.addBlock("RandomNumber", 0, 0);
+    noise->params().set("sampleTime", 0.05);
+    noise->params().set("seed", 11.0);
+
+    // y(k) = 0.6 y(k-1) + 0.4 u(k) + 0.2 u(k-1): the b0 term only shows up
+    // once the block is allowed to adapt one.
+    Block* plant = model.addBlock("DiscreteTransferFcn", 200, 0);
+    plant->params().set("numerator", std::vector<double>{0.4, 0.2});
+    plant->params().set("denominator", std::vector<double>{1.0, -0.6});
+    plant->params().set("sampleTime", 0.05);
+
+    Block* fit = model.addBlock("DiscreteAdaptiveTransferFcn", 400, 0);
+    fit->params().set("order", 1.0);
+    fit->params().set("sampleTime", 0.05);
+    fit->params().set("algorithm", std::string("rls"));
+    fit->params().set("directTerm", true);
+
+    Block* scope = model.addBlock("Scope", 600, 0);
+
+    model.connect(noise->id(), 0, plant->id(), 0);
+    model.connect(noise->id(), 0, fit->id(), 0);
+    model.connect(plant->id(), 0, fit->id(), 1);
+    model.connect(fit->id(), 2, scope->id(), 0);
+
+    model.solver().stopTime = 60.0;
+
+    Simulator* simulator = nullptr;
+    runToEnd(model, &simulator);
+
+    const LogChannel& weights = simulator->log().channels().front();
+    check(weights.width == 3, "the w output carries 2N + 1 weights");
+
+    const int last = simulator->log().sampleCount() - 1;
+    checkClose(weights.at(last, 0), -0.6, 1e-6, "a1");
+    checkClose(weights.at(last, 1), 0.4, 1e-6, "b0");
+    checkClose(weights.at(last, 2), 0.2, 1e-6, "b1");
+}
+
+void testDiscreteAdaptiveTransferFcnFrozenWithoutExcitation() {
+    beginTest("Adaptive transfer function holds still when nothing drives it");
+
+    Model model;
+    Block* silence = model.addBlock("Constant", 0, 0);
+    silence->params().set("value", std::vector<double>{0.0});
+
+    Block* fit = model.addBlock("DiscreteAdaptiveTransferFcn", 200, 0);
+    fit->params().set("order", 2.0);
+    fit->params().set("sampleTime", 0.05);
+    fit->params().set("initialWeights", std::vector<double>{0.3, -0.1, 2.0,
+                                                            1.5});
+
+    Block* scope = model.addBlock("Scope", 400, 0);
+
+    model.connect(silence->id(), 0, fit->id(), 0);
+    model.connect(silence->id(), 0, fit->id(), 1);
+    model.connect(fit->id(), 2, scope->id(), 0);
+
+    model.solver().stopTime = 5.0;
+
+    Simulator* simulator = nullptr;
+    runToEnd(model, &simulator);
+
+    const LogChannel& weights = simulator->log().channels().front();
+    const int last = simulator->log().sampleCount() - 1;
+    const std::vector<double> expected{0.3, -0.1, 2.0, 1.5};
+    for (int i = 0; i < 4; ++i)
+        checkClose(weights.at(last, i), expected[i], 1e-12,
+                   "weight " + std::to_string(i) + " is untouched");
+}
+
+// 2/(s + 3), so the weights [a1, b1] settle at [3, 2]. The excitation has to
+// keep moving or nothing pins the parameters down.
+static void runContinuousIdentification(const std::string& algorithm,
+                                        double tolerance) {
+    Model model;
+    Block* noise = model.addBlock("RandomNumber", 0, 0);
+    noise->params().set("sampleTime", 0.05);
+    noise->params().set("seed", 5.0);
+
+    Block* plant = model.addBlock("TransferFcn", 200, 0);
+    plant->params().set("numerator", std::vector<double>{2.0});
+    plant->params().set("denominator", std::vector<double>{1.0, 3.0});
+
+    Block* fit = model.addBlock("AdaptiveTransferFcn", 400, 0);
+    fit->params().set("order", 1.0);
+    fit->params().set("algorithm", algorithm);
+    fit->params().set("filterCutoff", 20.0);
+    fit->params().set("adaptationGain", 50.0);
+
+    Block* scope = model.addBlock("Scope", 600, 0);
+
+    model.connect(noise->id(), 0, plant->id(), 0);
+    model.connect(noise->id(), 0, fit->id(), 0);
+    model.connect(plant->id(), 0, fit->id(), 1);
+    model.connect(fit->id(), 2, scope->id(), 0);
+
+    model.solver().stopTime = 60.0;
+    model.solver().relTol = 1e-8;
+    model.solver().absTol = 1e-10;
+
+    Simulator* simulator = nullptr;
+    runToEnd(model, &simulator);
+
+    const SignalLog& log = simulator->log();
+    const LogChannel& weights = log.channels().front();
+    check(weights.width == 2, algorithm + ": the w output carries 2N weights");
+
+    const int last = log.sampleCount() - 1;
+    checkClose(weights.at(last, 0), 3.0, tolerance, algorithm + ": a1");
+    checkClose(weights.at(last, 1), 2.0, tolerance, algorithm + ": b1");
+}
+
+void testContinuousAdaptiveTransferFcn() {
+    beginTest("Continuous adaptive transfer function recovers its plant");
+
+    runContinuousIdentification("rls", 1e-3);
+    runContinuousIdentification("gradient", 1e-3);
+}
+
+void testContinuousAdaptiveSecondOrder() {
+    beginTest("Continuous adaptive fit handles a second-order plant");
+
+    Model model;
+    Block* noise = model.addBlock("RandomNumber", 0, 0);
+    noise->params().set("sampleTime", 0.05);
+    noise->params().set("seed", 3.0);
+
+    // 4 / (s^2 + 3s + 2), so [a1, a2, b1, b2] = [3, 2, 0, 4].
+    Block* plant = model.addBlock("TransferFcn", 200, 0);
+    plant->params().set("numerator", std::vector<double>{4.0});
+    plant->params().set("denominator", std::vector<double>{1.0, 3.0, 2.0});
+
+    Block* fit = model.addBlock("AdaptiveTransferFcn", 400, 0);
+    fit->params().set("order", 2.0);
+    fit->params().set("algorithm", std::string("rls"));
+    fit->params().set("filterCutoff", 20.0);
+
+    Block* scope = model.addBlock("Scope", 600, 0);
+
+    model.connect(noise->id(), 0, plant->id(), 0);
+    model.connect(noise->id(), 0, fit->id(), 0);
+    model.connect(plant->id(), 0, fit->id(), 1);
+    model.connect(fit->id(), 2, scope->id(), 0);
+
+    model.solver().stopTime = 60.0;
+    model.solver().relTol = 1e-8;
+    model.solver().absTol = 1e-10;
+
+    Simulator* simulator = nullptr;
+    runToEnd(model, &simulator);
+
+    const LogChannel& weights = simulator->log().channels().front();
+    check(weights.width == 4, "the w output carries 2N weights");
+    if (weights.width != 4) return;
+
+    const int last = simulator->log().sampleCount() - 1;
+    const std::vector<double> expected{3.0, 2.0, 0.0, 4.0};
+    const std::vector<std::string> names{"a1", "a2", "b1", "b2"};
+    for (int i = 0; i < 4; ++i)
+        checkClose(weights.at(last, i), expected[i], 1e-3, names[i]);
+}
+
+void testContinuousAdaptiveTransferFcnDirectTerm() {
+    beginTest("Continuous adaptive fit picks up a feedthrough term");
+
+    Model model;
+    Block* noise = model.addBlock("RandomNumber", 0, 0);
+    noise->params().set("sampleTime", 0.05);
+    noise->params().set("seed", 13.0);
+
+    // (0.5 s + 4) / (s + 2): b0 = 0.5, b1 = 4, a1 = 2.
+    Block* plant = model.addBlock("TransferFcn", 200, 0);
+    plant->params().set("numerator", std::vector<double>{0.5, 4.0});
+    plant->params().set("denominator", std::vector<double>{1.0, 2.0});
+
+    Block* fit = model.addBlock("AdaptiveTransferFcn", 400, 0);
+    fit->params().set("order", 1.0);
+    fit->params().set("algorithm", std::string("rls"));
+    fit->params().set("filterCutoff", 20.0);
+    fit->params().set("directTerm", true);
+
+    Block* scope = model.addBlock("Scope", 600, 0);
+
+    model.connect(noise->id(), 0, plant->id(), 0);
+    model.connect(noise->id(), 0, fit->id(), 0);
+    model.connect(plant->id(), 0, fit->id(), 1);
+    model.connect(fit->id(), 2, scope->id(), 0);
+
+    model.solver().stopTime = 60.0;
+    model.solver().relTol = 1e-8;
+    model.solver().absTol = 1e-10;
+
+    Simulator* simulator = nullptr;
+    runToEnd(model, &simulator);
+
+    const LogChannel& weights = simulator->log().channels().front();
+    check(weights.width == 3, "the w output carries 2N + 1 weights");
+
+    const int last = simulator->log().sampleCount() - 1;
+    checkClose(weights.at(last, 0), 2.0, 1e-3, "a1");
+    checkClose(weights.at(last, 1), 0.5, 1e-3, "b0");
+    checkClose(weights.at(last, 2), 4.0, 1e-3, "b1");
+}
+
+void testDisplayPublishesItsValue() {
+    beginTest("Display publishes the value it was handed");
+
+    Model model;
+    Block* source = model.addBlock("Constant", 0, 0);
+    source->params().set("value", std::vector<double>{3.5, -0.25});
+    Block* display = model.addBlock("Display", 200, 0);
+    model.connect(source->id(), 0, display->id(), 0);
+
+    model.solver().stopTime = 0.5;
+
+    check(isDisplay(display), "the block is recognised as a display");
+    check(displayedValue(display).size() == 0,
+          "nothing is shown before a run");
+
+    runToEnd(model);
+
+    const Vec shown = displayedValue(display);
+    check(shown.size() == 2, "the display keeps the full signal width");
+    if (shown.size() != 2) return;
+    checkClose(shown[0], 3.5, 1e-12, "element 0");
+    checkClose(shown[1], -0.25, 1e-12, "element 1");
+}
+
 void runEngineTests() {
     runTest(testIntegratorRamp);
     runTest(testFirstOrderStepResponse);
@@ -550,4 +835,11 @@ void runEngineTests() {
     runTest(testZeroCrossingAccuracy);
     runTest(testSaturatedIntegratorEvent);
     runTest(testSwitchEventTiming);
+    runTest(testDiscreteAdaptiveTransferFcnConverges);
+    runTest(testDiscreteAdaptiveTransferFcnDirectTerm);
+    runTest(testContinuousAdaptiveTransferFcn);
+    runTest(testContinuousAdaptiveSecondOrder);
+    runTest(testContinuousAdaptiveTransferFcnDirectTerm);
+    runTest(testDisplayPublishesItsValue);
+    runTest(testDiscreteAdaptiveTransferFcnFrozenWithoutExcitation);
 }

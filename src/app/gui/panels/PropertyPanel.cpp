@@ -1,11 +1,11 @@
 #include "PropertyPanel.h"
 
+#include "app/gui/NumberInput.h"
 #include "app/gui/style/Theme.h"
 #include "model/BlockRegistry.h"
 
 #include <QCheckBox>
 #include <QComboBox>
-#include <QDoubleValidator>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -22,7 +22,7 @@ namespace {
 
 QString vectorToText(const std::vector<double>& values) {
     QStringList parts;
-    for (double value : values) parts << QString::number(value, 'g', 10);
+    for (double value : values) parts << numbers::format(value);
     return parts.join(QStringLiteral(", "));
 }
 
@@ -282,7 +282,7 @@ void PropertyPanel::rebuild() {
             case ParamSpec::Kind::Vector: {
                 auto* line = new QLineEdit(
                     vectorToText(block_->params().vectorOr(name, vectorDefault(spec))));
-                line->setPlaceholderText(tr("e.g. 1, 2, 3"));
+                line->setPlaceholderText(tr("e.g. 1, 2.5, 3"));
                 const std::vector<double> fallback = vectorDefault(spec);
                 connect(line, &QLineEdit::editingFinished, this,
                         [this, name, line, fallback] {
@@ -329,23 +329,22 @@ void PropertyPanel::rebuild() {
 
             case ParamSpec::Kind::Real:
             default: {
-                auto* line = new QLineEdit(
-                    QString::number(block_->params().realOr(name, realDefault(spec)), 'g', 10));
-                auto* validator = new QDoubleValidator(line);
-                validator->setNotation(QDoubleValidator::ScientificNotation);
-                validator->setBottom(spec.minimum);
-                validator->setTop(spec.maximum);
-                line->setValidator(validator);
+                auto* line = new QLineEdit(numbers::format(
+                    block_->params().realOr(name, realDefault(spec))));
+                numbers::constrain(line, spec.minimum, spec.maximum);
                 const double fallback = realDefault(spec);
                 connect(line, &QLineEdit::editingFinished, this,
                         [this, name, line, fallback] {
                             bool ok = false;
-                            const double value = line->text().toDouble(&ok);
+                            const double value = numbers::parse(line->text(),
+                                                                &ok);
                             if (!ok) {
-                                line->setText(QString::number(
-                                    block_->params().realOr(name, fallback), 'g', 10));
+                                line->setText(numbers::format(
+                                    block_->params().realOr(name, fallback)));
                                 return;
                             }
+                            // Redrawn: a typed comma comes back as a point.
+                            line->setText(numbers::format(value));
                             commit(name, value);
                         });
                 editor = line;

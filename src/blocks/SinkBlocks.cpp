@@ -1,3 +1,5 @@
+#include "SinkBlocks.h"
+
 #include "BlockUtils.h"
 
 #include <fstream>
@@ -24,7 +26,7 @@ public:
     bool logsInputs() const override { return true; }
 };
 
-class DisplayBlock : public Block {
+class DisplayBlock : public DisplaySink {
 public:
     PortLayout ports() const override { return {{"in"}, {}}; }
 
@@ -33,16 +35,17 @@ public:
         s.directFeedthrough.assign(s.inputCount(), true);
     }
 
+    void initialize(Eigen::Ref<Vec> xc, Eigen::Ref<Vec> xd) override {
+        (void)xc;
+        (void)xd;
+        clearValue();
+    }
+
     void computeOutputs(const EvalContext& c) override {
-        if (c.majorStep) latest_ = c.in(0);
+        if (c.majorStep) publish(c.in(0));
     }
 
     bool logsInputs() const override { return true; }
-
-    const Vec& latest() const { return latest_; }
-
-private:
-    Vec latest_;
 };
 
 class TerminatorBlock : public Block {
@@ -110,13 +113,25 @@ private:
 
 }
 
+bool isDisplay(const Block* block) {
+    return dynamic_cast<const DisplaySink*>(block) != nullptr;
+}
+
+Vec displayedValue(const Block* block) {
+    const auto* sink = dynamic_cast<const DisplaySink*>(block);
+    return sink ? sink->latest() : Vec();
+}
+
 void registerSinkBlocks() {
     registerBlockType<ScopeBlock>(
         "Scope", "Sinks", "Records and plots its inputs against time.",
         {intParam("inputs", "Number of inputs", 1, 1, 32),
          boolParam("autoscale", "Auto-scale the vertical axis", true),
          realParam("yMin", "Y minimum", -1.0),
-         realParam("yMax", "Y maximum", 1.0)},
+         realParam("yMax", "Y maximum", 1.0),
+         realParam("window", "Time window (s)", 0.0,
+                   "Seconds kept on screen while the model runs. 0 shows the "
+                   "whole run.")},
         70.0, 60.0);
 
     registerBlockType<DisplayBlock>("Display", "Sinks",

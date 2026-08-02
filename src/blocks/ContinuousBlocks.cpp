@@ -272,6 +272,187 @@ private:
     Vec initial_;
 };
 
+/// Online identification of an order-N Laplace transfer function.
+///
+/// Derivatives of a measured signal cannot be taken directly, so both sides of
+/// A(s) y = B(s) u are passed through a state variable filter 1/(s + lambda)^N.
+/// That turns the unmeasurable derivatives into filter states and leaves a
+/// plain linear regression, y_f^(N) = theta' phi, whose weights are then
+/// driven downhill continuously alongside the rest of the model.
+class AdaptiveTransferFcnBlock : public Block {
+public:
+    PortLayout ports() const override { return {{"u", "d"}, {"y", "e", "w"}}; }
+
+    void setup(BlockSetup& s) override {
+        order_ = params().integer("order", 2);
+        if (order_ < 1) throw ModelError("the model order must be at least 1");
+
+        directTerm_ = params().boolean("directTerm", false);
+        leastSquares_ = params().text("algorithm", "gradient") == "rls";
+
+        cutoff_ = params().real("filterCutoff", 10.0);
+        gain_ = params().real("adaptationGain", 1.0);
+        forgetting_ = params().real("forgettingRate", 0.0);
+        covariance_ = params().real("initialCovariance", 1e6);
+
+        if (cutoff_ <= 0.0)
+            throw ModelError("the filter cutoff must be strictly positive");
+        if (gain_ <= 0.0)
+            throw ModelError("the adaptation gain must be strictly positive");
+        if (forgetting_ < 0.0)
+            throw ModelError("the forgetting rate cannot be negative");
+        if (covariance_ <= 0.0)
+            throw ModelError("the initial covariance must be strictly "
+                             "positive");
+
+        // (s + lambda)^N, so lambda_[i] multiplies s^(N - i).
+        lambda_.assign(order_ + 1, 1.0);
+        for (int i = 1; i <= order_; ++i)
+            lambda_[i] = lambda_[i - 1] * cutoff_ * (order_ - i + 1) / i;
+
+        // The filter is run at unity DC gain instead of 1/lambda^N. Both sides
+        // of the equation scale together so the weights are untouched, but the
+        // regressor keeps the size of the signal rather than shrinking by
+        // lambda^N — which would otherwise leave the prior outweighing the
+        // measurements and the fit stranded short of the answer.
+        scale_ = lambda_[order_];
+
+        weights_ = 2 * order_ + (directTerm_ ? 1 : 0);
+        initial_ = broadcast(params().vector("initialWeights", {0.0}), weights_,
+                             "the initial weights");
+        phi_.resize(weights_);
+
+        s.outputWidths[0] = 1;
+        s.outputWidths[1] = 1;
+        s.outputWidths[2] = weights_;
+        s.continuousStates = weights_ + 2 * order_ +
+                             (leastSquares_ ? weights_ * weights_ : 0);
+        s.directFeedthrough[0] = directTerm_;
+        s.directFeedthrough[1] = true;
+    }
+
+    void initialize(Eigen::Ref<Vec> xc, Eigen::Ref<Vec> xd) override {
+        (void)xd;
+        xc.setZero();
+        xc.head(weights_) = initial_;
+        if (leastSquares_)
+            for (int i = 0; i < weights_; ++i)
+                xc[covarianceOffset() + i * weights_ + i] = covariance_;
+    }
+
+    void computeOutputs(const EvalContext& c) override {
+        const double d = scalar(c, 1);
+        buildRegressor(c.xc, scalar(c, 0));
+
+        // y = theta' phi + the filter's own contribution, undone by the same
+        // scale, which makes the equation error and the output error the one
+        // signal up to that factor.
+        const double tail = filterTail(c.xc);
+        const double prediction = (theta(c.xc).dot(phi_) + tail) / scale_;
+
+        c.out(0)[0] = prediction;
+        c.out(1)[0] = d - prediction;
+        c.out(2) = theta(c.xc);
+    }
+
+    void computeDerivatives(const EvalContext& c,
+                            Eigen::Ref<Vec> dxc) override {
+        dxc.setZero();
+
+        const double u = scalar(c, 0);
+        const double d = scalar(c, 1);
+        buildRegressor(c.xc, u);
+
+        const double topOutput = scale_ * d - filterTail(c.xc);
+        const double error = topOutput - theta(c.xc).dot(phi_);
+        const double normal = 1.0 + phi_.squaredNorm();
+
+        if (leastSquares_) adaptLeastSquares(c.xc, error, normal, dxc);
+        else dxc.head(weights_) = (gain_ * error / normal) * phi_;
+
+        advanceFilter(c.xc, outputFilterOffset(), topOutput, dxc);
+        advanceFilter(c.xc, inputFilterOffset(), topInput(c.xc, u), dxc);
+
+        // A fit that has run away must not drag the solver down with it.
+        if (!dxc.allFinite()) dxc.setZero();
+    }
+
+private:
+    static double scalar(const EvalContext& c, int port) {
+        const Vec& u = c.in(port);
+        return u.size() > 0 ? u[0] : 0.0;
+    }
+
+    Eigen::Map<const Vec> theta(const double* xc) const {
+        return Eigen::Map<const Vec>(xc, weights_);
+    }
+
+    int outputFilterOffset() const { return weights_; }
+    int inputFilterOffset() const { return weights_ + order_; }
+    int covarianceOffset() const { return weights_ + 2 * order_; }
+
+    /// The filter state holds Y_0..Y_(N-1); the top derivative Y_N is what is
+    /// left of the measurement once the filter's own poles are accounted for.
+    double filterTail(const double* xc) const {
+        const double* y = xc + outputFilterOffset();
+        double sum = 0.0;
+        for (int i = 1; i <= order_; ++i) sum += lambda_[i] * y[order_ - i];
+        return sum;
+    }
+
+    double topInput(const double* xc, double u) const {
+        const double* uf = xc + inputFilterOffset();
+        double sum = scale_ * u;
+        for (int i = 1; i <= order_; ++i) sum -= lambda_[i] * uf[order_ - i];
+        return sum;
+    }
+
+    /// phi = [-Y_(N-1)..-Y_0, U_N, U_(N-1)..U_0], matching
+    /// theta = [a1..aN, b0, b1..bN] so that A(s) y = B(s) u.
+    void buildRegressor(const double* xc, double u) {
+        const double* y = xc + outputFilterOffset();
+        const double* uf = xc + inputFilterOffset();
+
+        int index = 0;
+        for (int i = 0; i < order_; ++i) phi_[index++] = -y[order_ - 1 - i];
+        if (directTerm_) phi_[index++] = topInput(xc, u);
+        for (int i = 0; i < order_; ++i) phi_[index++] = uf[order_ - 1 - i];
+    }
+
+    /// Each filter is a chain of integrators: the state below is the integral
+    /// of the one above, and the top one is fed by the signal.
+    void advanceFilter(const double* xc, int offset, double top,
+                       Eigen::Ref<Vec> dxc) const {
+        for (int i = 0; i < order_ - 1; ++i)
+            dxc[offset + i] = xc[offset + i + 1];
+        dxc[offset + order_ - 1] = top;
+    }
+
+    void adaptLeastSquares(const double* xc, double error, double normal,
+                           Eigen::Ref<Vec> dxc) const {
+        const int offset = covarianceOffset();
+        Eigen::Map<const Mat> p(xc + offset, weights_, weights_);
+        const Vec pPhi = p * phi_;
+
+        dxc.head(weights_) = (error / normal) * pPhi;
+
+        // Forgetting with no excitation would blow the covariance up, and the
+        // weights with it: hold off once the matrix has grown far enough.
+        const double limit = covariance_ * weights_;
+        const double rate = p.trace() < limit ? forgetting_ : 0.0;
+
+        const Mat derivative = rate * p - (pPhi * pPhi.transpose()) / normal;
+        Eigen::Map<Mat>(dxc.data() + offset, weights_, weights_) = derivative;
+    }
+
+    std::vector<double> lambda_;
+    Vec initial_, phi_;
+    int order_ = 2, weights_ = 4;
+    double cutoff_ = 10.0, gain_ = 1.0, scale_ = 10.0;
+    double forgetting_ = 0.0, covariance_ = 1000.0;
+    bool directTerm_ = false, leastSquares_ = false;
+};
+
 class PidBlock : public Block {
 public:
     PortLayout ports() const override { return {{"e"}, {"out"}}; }
@@ -385,6 +566,38 @@ void registerContinuousBlocks() {
          vectorParam("D", "D matrix (row-major)", {0.0}),
          vectorParam("initialCondition", "Initial state", {0.0})},
         110.0, 70.0);
+
+    registerBlockType<AdaptiveTransferFcnBlock>(
+        "AdaptiveTransferFcn", "Continuous",
+        "Fits an order-N Laplace transfer function to a measured signal while "
+        "the model runs.",
+        {intParam("order", "Model order N", 2, 1, 32,
+                  "Number of poles. The block adapts N denominator "
+                  "coefficients and N (or N+1) numerator coefficients."),
+         realParam("filterCutoff", "State filter cutoff (rad/s)", 10.0,
+                   "Bandwidth of the filter that stands in for the "
+                   "derivatives. Put it well above the plant's own dynamics "
+                   "but below the noise you do not want amplified."),
+         choiceParam("algorithm", "Adaptation", {"gradient", "rls"},
+                     std::string("gradient"),
+                     "gradient: normalised steepest descent, cheap and "
+                     "forgiving. rls: recursive least squares, converges in "
+                     "far less time but carries an N^2 covariance matrix."),
+         realParam("adaptationGain", "Gradient gain", 1.0,
+                   "Larger tracks faster and rings more."),
+         realParam("forgettingRate", "RLS forgetting rate (1/s)", 0.0,
+                   "Above 0 the fit follows a drifting plant; 0 weighs the "
+                   "whole run equally."),
+         realParam("initialCovariance", "RLS initial covariance", 1e6,
+                   "How far the weights may move early on. Too small and the "
+                   "initial guess outweighs the measurements: the fit then "
+                   "stalls short of the answer instead of reaching it."),
+         boolParam("directTerm", "Adapt a direct term (b0)", false,
+                   "On when the plant passes its input straight through. Off "
+                   "keeps the block free of direct feedthrough on u."),
+         vectorParam("initialWeights", "Initial weights", {0.0},
+                     "[a1..aN, b0, b1..bN], matching the w output.")},
+        130.0, 90.0);
 
     registerBlockType<PidBlock>(
         "PID", "Continuous",

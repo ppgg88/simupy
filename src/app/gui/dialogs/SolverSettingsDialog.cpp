@@ -1,12 +1,13 @@
 #include "SolverSettingsDialog.h"
 
+#include "app/gui/NumberInput.h"
+
 #include "PythonEditor.h"
 #include "PythonHighlighter.h"
 
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
-#include <QDoubleValidator>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QLabel>
@@ -19,16 +20,14 @@ namespace simupy {
 namespace {
 
 QLineEdit* numberField(double value, QWidget* parent) {
-    auto* field = new QLineEdit(QString::number(value, 'g', 10), parent);
-    auto* validator = new QDoubleValidator(field);
-    validator->setNotation(QDoubleValidator::ScientificNotation);
-    field->setValidator(validator);
+    auto* field = new QLineEdit(numbers::format(value), parent);
+    numbers::constrain(field);
     return field;
 }
 
 double fieldValue(const QLineEdit* field, double fallback) {
     bool ok = false;
-    const double value = field->text().toDouble(&ok);
+    const double value = numbers::parse(field->text(), &ok);
     return ok ? value : fallback;
 }
 

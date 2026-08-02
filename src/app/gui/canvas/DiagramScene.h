@@ -60,6 +60,9 @@ public:
     void applySignalWidths(const CompiledModel& compiled);
     void clearSignalWidths();
 
+    /// Repaints the blocks that show a live value, such as Display.
+    void refreshValues();
+
     void setBlockProblem(const QString& blockId, const QString& message);
     void clearBlockProblems();
 

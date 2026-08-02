@@ -108,6 +108,7 @@ private:
     void openScope(const QString& path, const QString& title,
                    const Parameters& params);
     void openScopesForRun();
+    Block* scopeBlockAt(const QString& path);
     void closeAllScopes();
     void setScopeDocked(const QString& path, bool docked);
     void setScopeAlwaysOnTop(const QString& path, bool onTop);

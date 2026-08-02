@@ -12,6 +12,7 @@ endif()
 
 qt_add_library(simupy-gui STATIC
     MainWindow.cpp
+    NumberInput.cpp
     SimulationController.cpp
 
     style/Theme.cpp

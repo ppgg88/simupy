@@ -45,6 +45,9 @@ public:
 
     void refresh();
 
+    /// Repaints a live readout: cheap, and a no-op on every other block.
+    void refreshValue();
+
     void commitGeometry();
 
     void setProblem(const QString& message);
@@ -74,6 +77,7 @@ protected:
 
 private:
     void paintGlyph(QPainter* painter, const QRectF& body) const;
+    void paintReadout(QPainter* painter, const QRectF& body) const;
     void paintPorts(QPainter* painter) const;
     QPointF inputLocalPos(int index) const;
     QPointF outputLocalPos(int index) const;

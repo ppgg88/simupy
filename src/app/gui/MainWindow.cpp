@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 
+#include "app/gui/NumberInput.h"
 #include "app/gui/style/AppIcons.h"
 #include "app/gui/canvas/BlockItem.h"
 #include "app/gui/panels/BlockLibraryPanel.h"
@@ -486,7 +487,8 @@ void MainWindow::buildToolBar() {
     bar->addAction(unboundedAction_);
 
     auto* stopTimeField = new QLineEdit(
-        QString::number(model_.solver().stopTime, 'g', 6), bar);
+        numbers::format(model_.solver().stopTime, 6), bar);
+    numbers::constrain(stopTimeField);
     stopTimeField->setMaximumWidth(80);
     stopTimeField->setAlignment(Qt::AlignRight);
     stopTimeField->setToolTip(tr("How long to simulate, in seconds"));
@@ -494,14 +496,13 @@ void MainWindow::buildToolBar() {
     connect(stopTimeField, &QLineEdit::editingFinished, this,
             [this, stopTimeField] {
                 bool ok = false;
-                const double value = stopTimeField->text().toDouble(&ok);
+                const double value = numbers::parse(stopTimeField->text(), &ok);
                 if (ok && value > model_.solver().startTime) {
                     model_.solver().stopTime = value;
                     setDirty(true);
-                } else {
-                    stopTimeField->setText(
-                        QString::number(model_.solver().stopTime, 'g', 6));
                 }
+                stopTimeField->setText(
+                    numbers::format(model_.solver().stopTime, 6));
             });
     stopTimeField_ = stopTimeField;
 
@@ -1122,8 +1123,9 @@ void MainWindow::openScope(const QString& path, const QString& title,
 
     if (!slot) {
         slot = new ScopeWindow(path, title);
-        slot->setYRange(params.boolean("autoscale", true),
-                        params.real("yMin", -1.0), params.real("yMax", 1.0));
+        slot->setYRange(params.booleanOr("autoscale", true),
+                        params.realOr("yMin", -1.0), params.realOr("yMax", 1.0));
+        slot->setTimeWindow(params.realOr("window", 0.0));
 
         auto* dock = new QDockWidget(title, this);
         dock->setObjectName(QStringLiteral("scope:") + path);
@@ -1139,6 +1141,16 @@ void MainWindow::openScope(const QString& path, const QString& title,
                 [this, path](bool docked) { setScopeDocked(path, docked); });
         connect(slot, &ScopeWindow::alwaysOnTopRequested, this,
                 [this, path](bool onTop) { setScopeAlwaysOnTop(path, onTop); });
+        connect(slot, &ScopeWindow::timeWindowChanged, this,
+                [this, path](double seconds) {
+                    // Looked up rather than captured: the block can be
+                    // deleted while its plot stays open.
+                    if (Block* block = scopeBlockAt(path)) {
+                        block->params().set("window", seconds);
+                        properties_->refresh();
+                        setDirty(true);
+                    }
+                });
 
         const QRect available =
             QGuiApplication::primaryScreen()->availableGeometry();
@@ -1196,6 +1208,26 @@ void MainWindow::setScopeAlwaysOnTop(const QString& path, bool onTop) {
     dock->raise();
 
     scope->setPlacement(false, onTop);
+}
+
+Block* MainWindow::scopeBlockAt(const QString& path) {
+    struct Walker {
+        const QString& wanted;
+        Block* operator()(Model& model, const QString& prefix) const {
+            for (const BlockPtr& held : model.blocks()) {
+                const QString name = QString::fromStdString(held->name());
+                if (auto* subsystem = dynamic_cast<SubsystemBlock*>(held.get())) {
+                    if (Block* found = (*this)(subsystem->contents(),
+                                               prefix + name + QLatin1Char('/')))
+                        return found;
+                } else if (prefix + name == wanted) {
+                    return held.get();
+                }
+            }
+            return nullptr;
+        }
+    };
+    return Walker{path}(model_, {});
 }
 
 void MainWindow::openScopesForRun() {
@@ -1316,6 +1348,7 @@ void MainWindow::onProgressed(double time, double fraction) {
     if (!model_.solver().unbounded)
         progress_->setValue(static_cast<int>(fraction * 1000));
     timeLabel_->setText(tr("t = %1 s").arg(time, 0, 'f', 4));
+    scene_->refreshValues();
 }
 
 void MainWindow::onDataUpdated(SignalLogPtr log) {
