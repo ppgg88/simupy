@@ -49,6 +49,52 @@ jobs:
           cmake --build build-headless --parallel
           ctest --test-dir build-headless --output-on-failure --timeout 300
 
+  windows:
+    name: Build and test (Windows)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # NumPy is imported when the interpreter starts, so the suite needs it.
+      - name: Python dependencies
+        run: python -m pip install --upgrade pybind11 numpy pyserial
+
+      - name: Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.7.3"
+          modules: qtcharts
+
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      - uses: ./.github/actions/windows-deps
+
+      # Ninja and MSVC, to keep the layout single-config like the Linux job.
+      - name: Configure
+        shell: pwsh
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --test-dir build --output-on-failure --timeout 300
+
+      # Proves the engine still compiles without Qt, as on Linux.
+      - name: Headless build, without Qt
+        shell: pwsh
+        run: |
+          cmake -S . -B build-headless -G Ninja -DCMAKE_BUILD_TYPE=Release `
+            -DSIMUPY_BUILD_GUI=OFF
+          cmake --build build-headless --parallel
+          ctest --test-dir build-headless --output-on-failure --timeout 300
+
   flatpak:
     name: Flatpak
     runs-on: ubuntu-24.04

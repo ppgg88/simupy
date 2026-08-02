@@ -12,6 +12,7 @@
 #include <QSlider>
 #include <QVBoxLayout>
 
+#include <algorithm>
 #include <cmath>
 
 namespace simupy {

@@ -1,5 +1,7 @@
 #include "MainWindow.h"
 
+#include <algorithm>
+
 #include "app/gui/NumberInput.h"
 #include "app/gui/style/AppIcons.h"
 #include "app/gui/canvas/BlockItem.h"

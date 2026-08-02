@@ -3,6 +3,7 @@
 #include <Eigen/Core>
 #include <Eigen/LU>
 
+#include <limits>
 #include <map>
 #include <stdexcept>
 #include <string>

@@ -1,5 +1,7 @@
 #include "PropertyPanel.h"
 
+#include <algorithm>
+
 #include "app/gui/NumberInput.h"
 #include "app/gui/style/Theme.h"
 #include "model/BlockRegistry.h"

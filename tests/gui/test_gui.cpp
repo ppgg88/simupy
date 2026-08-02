@@ -47,6 +47,7 @@
 #include <QTest>
 #include <QThread>
 
+#include <algorithm>
 #include <cmath>
 
 #include <iostream>
@@ -160,15 +161,20 @@ void testAddBlockAndWire() {
     check(model.blocks().size() == 2, "the model holds them");
     if (!source || !sink) return;
 
-    model.connect(source->block()->id(), 0, sink->block()->id(), 0);
+    // rebuild() clears the scene, so the items do not survive it. Keep the
+    // ids, which do, and look the items up again on the other side.
+    const std::string sourceId = source->block()->id();
+    const std::string sinkId = sink->block()->id();
+
+    model.connect(sourceId, 0, sinkId, 0);
     scene.rebuild();
 
     check(model.connections().size() == 1, "the wire reached the model");
     check(scene.items().size() == 3, "the scene shows two blocks and a wire");
 
     scene.clearSelection();
-    if (BlockItem* item = scene.itemForBlock(
-            QString::fromStdString(source->block()->id())))
+    if (BlockItem* item =
+            scene.itemForBlock(QString::fromStdString(sourceId)))
         item->setSelected(true);
     scene.deleteSelection();
 
@@ -1017,16 +1023,23 @@ void testLockedSceneStillDrivesControls() {
 
     BlockItem* item = scene.addBlock(QStringLiteral("Toggle"), QPointF(0, 0));
     scene.addBlock(QStringLiteral("Constant"), QPointF(200, 0));
+
+    // Read before rebuild(): that clears the scene and the item goes with it.
+    const QString toggleId = item->blockId();
+
     scene.rebuild();
     view.zoomToFit();
     QApplication::processEvents();
 
-    const QString toggleId = item->blockId();
     scene.setInteractionLocked(true);
     check(scene.isInteractionLocked(), "the scene reports itself locked");
 
     BlockItem* toggle = scene.itemForBlock(toggleId);
+    check(toggle != nullptr, "the toggle survived the rebuild");
+    if (!toggle) return;
+
     auto* block = dynamic_cast<InteractiveBlock*>(toggle->block());
+    check(block != nullptr, "and it is still an interactive block");
     if (!block) return;
 
     const double before = block->liveValue();

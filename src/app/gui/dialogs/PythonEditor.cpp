@@ -1,5 +1,7 @@
 #include "PythonEditor.h"
 
+#include <algorithm>
+
 #include "PythonHighlighter.h"
 #include "app/gui/style/Theme.h"
 
