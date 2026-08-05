@@ -27,6 +27,9 @@ public:
 
     void requestStop();
 
+    /// False means the thread is still running, and still reading the model.
+    bool stopAndWait(unsigned long milliseconds);
+
     bool isBusy() const { return isRunning(); }
 
 signals:

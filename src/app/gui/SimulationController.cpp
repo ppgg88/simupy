@@ -21,7 +21,13 @@ SimulationController::SimulationController(QObject* parent) : QThread(parent) {
 
 SimulationController::~SimulationController() {
     requestStop();
-    wait(5000);
+    // A QThread destroyed while running aborts the process; stalling is safer.
+    if (!wait(5000)) wait();
+}
+
+bool SimulationController::stopAndWait(unsigned long milliseconds) {
+    requestStop();
+    return wait(milliseconds);
 }
 
 void SimulationController::start(Model& model) {

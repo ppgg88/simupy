@@ -149,10 +149,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 }
 
 MainWindow::~MainWindow() {
-    if (controller_->isBusy()) {
-        controller_->requestStop();
-        controller_->wait(5000);
-    }
+    // model_ dies here; controller_ only in ~QObject. Stop the run first.
+    controller_->requestStop();
+    controller_->wait();
     PythonEngine::instance().setOutputHandler({});
 }
 
@@ -915,9 +914,16 @@ void MainWindow::showLibraryManager() {
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
-    if (controller_->isBusy()) {
-        controller_->requestStop();
-        controller_->wait(3000);
+    if (controller_->isBusy() && !controller_->stopAndWait(3000)) {
+        QMessageBox::warning(
+            this, tr("The run has not stopped"),
+            tr("The simulation is still going and did not answer the stop "
+               "request — a block is most likely waiting on hardware.\n\n"
+               "SimuPy cannot close while it runs, because the run would be "
+               "left reading a model that no longer exists. Disconnect the "
+               "device, or wait for the block to return, then close again."));
+        event->ignore();
+        return;
     }
     if (!confirmDiscardChanges()) {
         event->ignore();
