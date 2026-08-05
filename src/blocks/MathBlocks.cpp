@@ -1,5 +1,6 @@
 #include "BlockUtils.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace simupy {

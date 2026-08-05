@@ -2,6 +2,7 @@
 
 #include "BlockUtils.h"
 
+#include <algorithm>
 #include <fstream>
 #include <iomanip>
 

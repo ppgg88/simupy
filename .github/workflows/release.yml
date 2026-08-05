@@ -123,15 +123,129 @@ jobs:
           path: simupy-*.flatpak
           if-no-files-found: error
 
+  windows:
+    name: Windows installer
+    needs: test
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # CMake is told the version directly; the files stamp_version.py patches
+      # are Flatpak and AppStream, which this job does not build.
+      - name: Version
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF_TYPE -eq "tag") {
+            $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          } else {
+            $version = "${{ inputs.version }}"
+          }
+          "SIMUPY_VERSION=$version" >> $env:GITHUB_ENV
+
+      - name: Python dependencies
+        run: python -m pip install --upgrade pybind11 numpy pyserial
+
+      - name: Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.7.3"
+          modules: qtcharts
+
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      - uses: ./.github/actions/windows-deps
+
+      - name: Installer tooling
+        shell: pwsh
+        run: choco install nsis -y --no-progress
+
+      - name: Build
+        shell: pwsh
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release `
+            -DSIMUPY_BUILD_TESTS=OFF `
+            "-DSIMUPY_VERSION=$env:SIMUPY_VERSION"
+          cmake --build build --parallel
+
+      # The staged tree is exactly what the installer ships, so it is worth
+      # more to exercise it here than to test the installer's own plumbing.
+      - name: Smoke-test the install tree
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          cmake --install build --prefix staging
+
+          # The build machine's Python is taken off PATH: a user's machine will
+          # not have one, and the bundled runtime has to stand on its own.
+          $env:PATH = ($env:PATH -split ';' |
+            Where-Object { $_ -notmatch 'hostedtoolcache\\Python' }) -join ';'
+          $env:PYTHONPATH = ""
+          $env:PYTHONHOME = ""
+
+          # simupy-cli has no --version; --help exits 0 and its banner leads
+          # with the version. The GUI binary does take --version, but it is a
+          # Windows GUI subsystem app, so Qt would answer in a message box and
+          # sit there until the job times out.
+          # -join: without it PowerShell filters the array instead of
+          # returning a boolean, and the comparison silently never fires.
+          $banner = (& .\staging\bin\simupy-cli.exe --help) -join "`n"
+          if ($LASTEXITCODE -ne 0) { throw "simupy-cli did not start" }
+
+          # Or the version passed to CMake silently did nothing.
+          if ($banner -notmatch [regex]::Escape($env:SIMUPY_VERSION)) {
+            throw "expected $env:SIMUPY_VERSION in the banner: $banner"
+          }
+
+          .\staging\bin\simupy-cli.exe run examples\pid_control_loop.spy --stop 2
+          if ($LASTEXITCODE -ne 0) { throw "the CLI could not run a model" }
+
+          # Imports NumPy, proving the bundled site-packages is reachable.
+          .\staging\bin\simupy-cli.exe run examples\python_lorenz.spy --stop 3
+          if ($LASTEXITCODE -ne 0) { throw "NumPy is missing from the bundle" }
+
+          # Still up after ten seconds means windeployqt did its job.
+          # -WorkingDirectory: Start-Process does not inherit PowerShell's
+          # location, so the model path would not resolve without it.
+          $app = Start-Process -PassThru -FilePath .\staging\bin\simupy.exe `
+            -WorkingDirectory $PWD `
+            -ArgumentList "examples\python_lorenz.spy","--run"
+          Start-Sleep -Seconds 10
+          if ($app.HasExited) {
+            throw "the application did not stay up (exit $($app.ExitCode))"
+          }
+          $app.Kill()
+
+      - name: Package
+        shell: pwsh
+        run: cpack --config build/CPackConfig.cmake
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: simupy-windows
+          path: |
+            simupy-*.exe
+            simupy-*.zip
+          if-no-files-found: error
+
   publish:
     name: Publish
-    needs: package
+    needs: [package, windows]
     runs-on: ubuntu-24.04
     if: github.ref_type == 'tag'
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: simupy-flatpak
+          path: assets
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: simupy-windows
           path: assets
 
       - name: Checksums
@@ -145,7 +259,17 @@ jobs:
           files: assets/*
           generate_release_notes: true
           body: |
-            ## Installing
+            ## Installing on Windows
+
+            Download `simupy-*-Windows-AMD64.exe` and run it. Nothing else is
+            needed: Qt, Python, NumPy and pyserial are all inside the
+            installer, and the copy of Python it carries is used in preference
+            to any already on the machine.
+
+            `simupy-*-Windows-AMD64.zip` is the same tree without an
+            installer, for unpacking wherever you like.
+
+            ## Installing on Linux
 
             Download the `.flatpak` bundle and install it:
 

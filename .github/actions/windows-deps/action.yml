@@ -1,0 +1,64 @@
+name: Windows build dependencies
+description: >
+  Installs Eigen and nlohmann/json, pinned to the same versions and checksums
+  the Flatpak manifest uses so both platforms build against the same headers.
+  Shared by the CI and release workflows: the two drifting apart is how a
+  release breaks after CI has gone green.
+
+runs:
+  using: composite
+  steps:
+    - name: Eigen and nlohmann/json
+      shell: pwsh
+      # Outside the checkout: nothing this downloads should be able to end up
+      # in a package or in a git status.
+      working-directory: ${{ runner.temp }}
+      run: |
+        $ErrorActionPreference = "Stop"
+
+        function Fetch($url, $sha256, $archive) {
+          Invoke-WebRequest -Uri $url -OutFile $archive
+          $got = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLower()
+          if ($got -ne $sha256) {
+            throw "$archive : expected $sha256, got $got"
+          }
+          tar xf $archive
+          if ($LASTEXITCODE -ne 0) { throw "could not unpack $archive" }
+        }
+
+        Fetch "https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.gz" `
+              "8586084f71f9bde545ee7fa6d00288b264a2b7ac3607b974e54d13e7162c1c72" `
+              "eigen.tar.gz"
+
+        Fetch "https://github.com/nlohmann/json/archive/refs/tags/v3.11.3.tar.gz" `
+              "0d8ef5af7f9794e3263480193c491549b2ba6cc74bb018906202ada498a79406" `
+              "json.tar.gz"
+
+        $prefix = Join-Path $PWD "simupy-deps"
+
+        # Both releases predate CMake 4, which refuses their declared
+        # cmake_minimum_required outright rather than warning about it.
+        cmake -S eigen-3.4.0 -B build-eigen "-DCMAKE_INSTALL_PREFIX=$prefix" `
+          -DCMAKE_POLICY_VERSION_MINIMUM=3.5 `
+          -DBUILD_TESTING=OFF -DEIGEN_BUILD_DOC=OFF
+        if ($LASTEXITCODE -ne 0) { throw "configuring Eigen failed" }
+        cmake --install build-eigen
+        if ($LASTEXITCODE -ne 0) { throw "installing Eigen failed" }
+
+        cmake -S json-3.11.3 -B build-json "-DCMAKE_INSTALL_PREFIX=$prefix" `
+          -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DJSON_BuildTests=OFF
+        if ($LASTEXITCODE -ne 0) { throw "configuring nlohmann/json failed" }
+        cmake --install build-json
+        if ($LASTEXITCODE -ne 0) { throw "installing nlohmann/json failed" }
+
+        # find_package(Eigen3 3.3) compares with SameMajorVersion, which is why
+        # a 5.x Eigen from a package manager is refused rather than used.
+        if (-not (Test-Path "$prefix\share\eigen3\cmake\Eigen3Config.cmake")) {
+          throw "Eigen did not install its CMake config into $prefix"
+        }
+
+        # Prepended rather than assigned: install-qt-action puts Qt on this
+        # same variable, and overwriting it loses the Qt that was just set up.
+        $existing = $env:CMAKE_PREFIX_PATH
+        $combined = if ($existing) { "$prefix;$existing" } else { $prefix }
+        "CMAKE_PREFIX_PATH=$combined" >> $env:GITHUB_ENV

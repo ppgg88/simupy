@@ -218,8 +218,22 @@ void testArduinoDigitalAndSharing() {
 
 #endif
 
+#ifdef _WIN32
+
+void testSerialLoopbackNeedsAPty() {
+    beginTest("Serial loopback needs a pty — not run on Windows");
+
+    // The blocks themselves are Python and portable; only the fake board the
+    // tests drive them against is POSIX, so say so rather than going quiet.
+    check(loadHardwareLibrary(), "the shipped hardware library still loads");
+}
+
+#endif
+
 void runHardwareTests() {
-#ifndef _WIN32
+#ifdef _WIN32
+    runTest(testSerialLoopbackNeedsAPty);
+#else
     runTest(testArduinoLoopback);
     runTest(testArduinoDigitalAndSharing);
 #endif

@@ -31,10 +31,17 @@ std::string environmentPath(const char* variable) {
 }
 
 std::vector<std::string> splitPathList(const std::string& text) {
+    // Windows separates with ';': a ':' there belongs to the drive letter.
+#ifdef _WIN32
+    constexpr char kSeparator = ';';
+#else
+    constexpr char kSeparator = ':';
+#endif
+
     std::vector<std::string> parts;
     std::string current;
     for (char c : text) {
-        if (c == ':') {
+        if (c == kSeparator) {
             if (!current.empty()) parts.push_back(current);
             current.clear();
         } else {

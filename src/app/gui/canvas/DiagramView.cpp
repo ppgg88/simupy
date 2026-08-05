@@ -9,6 +9,7 @@
 #include <QScrollBar>
 #include <QWheelEvent>
 
+#include <algorithm>
 #include <cmath>
 
 namespace simupy {

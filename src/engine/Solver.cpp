@@ -1,5 +1,6 @@
 #include "Solver.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace simupy {

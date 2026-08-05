@@ -13,6 +13,7 @@
 #include "scripting/PythonEngine.h"
 
 #include <cmath>
+#include <cstdlib>
 #include <set>
 #include <string>
 #include <vector>
@@ -20,6 +21,15 @@
 using namespace simupy;
 
 namespace {
+
+void setEnvironment(const char* name, const char* value) {
+#ifdef _WIN32
+    _putenv_s(name, value ? value : "");
+#else
+    if (value) setenv(name, value, 1);
+    else unsetenv(name);
+#endif
+}
 
 struct Chain {
     Block* source;
@@ -190,10 +200,37 @@ void testPasteRejectsRubbish() {
     check(model.blocks().size() == 1, "and changes nothing");
 }
 
+void testLibrarySearchPathSplitting() {
+    beginTest("The library search path splits the way the platform writes it");
+
+#ifdef _WIN32
+    const char* separator = ";";
+    const std::string first = "C:\\Program Files\\SimuPy\\libraries";
+    const std::string second = "D:\\models\\blocks";
+#else
+    const char* separator = ":";
+    const std::string first = "/usr/share/simupy/libraries";
+    const std::string second = "/home/someone/blocks";
+#endif
+
+    const std::string joined = first + separator + second;
+    setEnvironment("SIMUPY_LIBRARY_PATH", joined.c_str());
+
+    const std::vector<std::string> paths =
+        LibraryManager::instance().searchPaths();
+    setEnvironment("SIMUPY_LIBRARY_PATH", nullptr);
+
+    check(paths.size() >= 2, "both entries came back");
+    if (paths.size() < 2) return;
+    check(paths[0] == first, "the first is whole, drive letter and all");
+    check(paths[1] == second, "and so is the second");
+}
+
 void runIoTests() {
     runTest(testCopyPasteRoundTrip);
     runTest(testCopyDropsHalfWires);
     runTest(testCopySubsystemTakesContents);
     runTest(testPasteTwice);
     runTest(testPasteRejectsRubbish);
+    runTest(testLibrarySearchPathSplitting);
 }
