@@ -364,6 +364,18 @@ private:
     bool maximum_ = false;
 };
 
+/// inheritedWidth() takes the max, so a narrower input would be indexed past.
+void requireBroadcastable(const BlockSetup& s, int width, const char* verb) {
+    for (int i = 0; i < s.inputCount(); ++i) {
+        if (!s.inputConnected[i]) continue;
+        const int w = s.inputWidths[i];
+        if (w != width && w != 1)
+            throw ModelError("input " + std::to_string(i + 1) + " is " +
+                             std::to_string(w) + " wide but the block " + verb +
+                             " " + std::to_string(width) + "-wide signals");
+    }
+}
+
 class RelationalOperatorBlock : public Block {
 public:
     PortLayout ports() const override { return {{"a", "b"}, {"out"}}; }
@@ -371,6 +383,7 @@ public:
     void setup(BlockSetup& s) override {
         operator_ = params().text("operator", ">");
         width_ = s.inheritedWidth();
+        requireBroadcastable(s, width_, "compares");
         s.outputWidths[0] = width_;
         s.zeroCrossings = width_;
     }
@@ -421,7 +434,9 @@ public:
 
     void setup(BlockSetup& s) override {
         operator_ = params().text("operator", "AND");
-        s.outputWidths[0] = s.inheritedWidth();
+        const int width = s.inheritedWidth();
+        requireBroadcastable(s, width, "combines");
+        s.outputWidths[0] = width;
     }
 
     void computeOutputs(const EvalContext& c) override {

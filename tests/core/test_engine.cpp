@@ -294,6 +294,44 @@ void testVectorWidthPropagation() {
     }
 }
 
+void testMismatchedLogicWidthRefused() {
+    beginTest("Comparing or combining incompatible widths is refused");
+
+    const auto compiles = [](const char* type,
+                             const std::vector<double>& right) {
+        Model model;
+        Block* a = model.addBlock("Constant", 0, 0);
+        a->params().set("value", std::vector<double>{1.0, 2.0, 3.0});
+        Block* b = model.addBlock("Constant", 0, 100);
+        b->params().set("value", right);
+
+        Block* combine = model.addBlock(type, 200, 0);
+        Block* scope = model.addBlock("Scope", 350, 0);
+        model.connect(a->id(), 0, combine->id(), 0);
+        model.connect(b->id(), 0, combine->id(), 1);
+        model.connect(combine->id(), 0, scope->id(), 0);
+        model.solver().stopTime = 0.1;
+
+        try {
+            Simulator simulator(model, pythonExpressionEvaluator());
+            simulator.initialize();
+        } catch (const ModelError&) {
+            return false;
+        }
+        return true;
+    };
+
+    check(!compiles("Relational", {4.0, 5.0}),
+          "Relational refuses 3 against 2");
+    check(compiles("Relational", {4.0}), "Relational still broadcasts a scalar");
+    check(compiles("Relational", {4.0, 5.0, 6.0}),
+          "Relational accepts matching widths");
+
+    check(!compiles("Logic", {4.0, 5.0}), "Logic refuses 3 against 2");
+    check(compiles("Logic", {4.0}), "Logic still broadcasts a scalar");
+    check(compiles("Logic", {4.0, 5.0, 6.0}), "Logic accepts matching widths");
+}
+
 void testSolverOrders() {
     beginTest("Fixed-step solvers reach their expected accuracy");
 
@@ -829,6 +867,7 @@ void runEngineTests() {
     runTest(testFeedbackLoopWithIntegrator);
     runTest(testDiscreteUnitDelay);
     runTest(testVectorWidthPropagation);
+    runTest(testMismatchedLogicWidthRefused);
     runTest(testSolverOrders);
     runTest(testStiffSolver);
     runTest(testSerializationRoundTrip);
