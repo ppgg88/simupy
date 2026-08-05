@@ -582,6 +582,37 @@ void testStepDiagnosticsAreReported() {
           "and the worst accepted error estimate is reported");
 }
 
+void testWidthPropagatesAgainstBlockOrder() {
+    beginTest("Width crosses a long chain built against the signal flow");
+
+    // Created last-to-first, so each block precedes its own source.
+    constexpr int kLinks = 400;
+    Model model;
+    std::vector<Block*> chain(kLinks);
+    for (int i = kLinks - 1; i >= 0; --i)
+        chain[i] = model.addBlock("Gain", 100.0 * i, 0);
+
+    Block* source = model.addBlock("Constant", -200, 0);
+    source->params().set("value", std::vector<double>(8, 1.0));
+    Block* scope = model.addBlock("Scope", 100.0 * (kLinks + 1), 0);
+
+    model.connect(source->id(), 0, chain.front()->id(), 0);
+    for (int i = 1; i < kLinks; ++i)
+        model.connect(chain[i - 1]->id(), 0, chain[i]->id(), 0);
+    model.connect(chain.back()->id(), 0, scope->id(), 0);
+
+    model.solver().stopTime = 0.1;
+
+    Simulator simulator(model, pythonExpressionEvaluator());
+    simulator.initialize();
+
+    const SignalLog& log = simulator.log();
+    check(!log.channels().empty(), "the scope logged a channel");
+    if (log.channels().empty()) return;
+    check(log.channels().front().width == 8,
+          "the eight-wide signal reached the far end of the chain");
+}
+
 void testSolverOrders() {
     beginTest("Fixed-step solvers reach their expected accuracy");
 
@@ -1124,6 +1155,7 @@ void runEngineTests() {
     runTest(testChatteringModelIsStopped);
     runTest(testDecimationKeepsSpikes);
     runTest(testStepDiagnosticsAreReported);
+    runTest(testWidthPropagatesAgainstBlockOrder);
     runTest(testSolverOrders);
     runTest(testStiffSolver);
     runTest(testSerializationRoundTrip);

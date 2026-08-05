@@ -3,6 +3,7 @@
 #include "model/FlatModel.h"
 
 #include <algorithm>
+#include <deque>
 #include <map>
 #include <queue>
 #include <set>
@@ -157,21 +158,40 @@ CompiledModel Scheduler::compile(Model& model,
         }
     };
 
-    const int maxIterations = blockCount + 3;
-    for (int iteration = 0; iteration < maxIterations; ++iteration) {
-        bool changed = false;
-        for (CompiledBlock& cb : compiled.blocks) {
-            BlockSetup setup;
-            runSetup(cb, setup);
-            for (std::size_t p = 0; p < cb.outputSignal.size(); ++p) {
-                const int width = setup.outputWidths[p];
-                if (width > 0 && compiled.signalWidths[cb.outputSignal[p]] != width) {
-                    compiled.signalWidths[cb.outputSignal[p]] = width;
-                    changed = true;
-                }
+    // Who reads each signal, so a settled width only revisits what it reaches.
+    std::vector<std::vector<int>> consumers(signalCount);
+    for (const CompiledBlock& cb : compiled.blocks)
+        for (int signal : cb.inputSignal)
+            if (signal >= 0) consumers[signal].push_back(cb.index);
+
+    std::vector<char> queued(blockCount, 1);
+    std::deque<int> pending;
+    for (int i = 0; i < blockCount; ++i) pending.push_back(i);
+
+    // A block that keeps changing its mind must not spin for ever.
+    long long budget = 8LL * blockCount + 1024;
+
+    while (!pending.empty() && budget-- > 0) {
+        const int index = pending.front();
+        pending.pop_front();
+        queued[index] = 0;
+
+        CompiledBlock& cb = compiled.blocks[index];
+        BlockSetup setup;
+        runSetup(cb, setup);
+
+        for (std::size_t p = 0; p < cb.outputSignal.size(); ++p) {
+            const int width = setup.outputWidths[p];
+            const int signal = cb.outputSignal[p];
+            if (width <= 0 || compiled.signalWidths[signal] == width) continue;
+
+            compiled.signalWidths[signal] = width;
+            for (int consumer : consumers[signal]) {
+                if (queued[consumer]) continue;
+                queued[consumer] = 1;
+                pending.push_back(consumer);
             }
         }
-        if (!changed) break;
     }
 
     for (const CompiledBlock& cb : compiled.blocks)
