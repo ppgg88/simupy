@@ -101,6 +101,11 @@ private:
     long long rejectedSteps_ = 0;
     long long derivativeEvals_ = 0;
     long long locatedEvents_ = 0;
+
+    /// A located event is an accepted step, so the rejection cap never sees
+    /// a chattering model.
+    long long collapsedEvents_ = 0;
+    double lastEventTime_ = 0.0;
     bool initialized_ = false;
     bool terminated_ = false;
 };

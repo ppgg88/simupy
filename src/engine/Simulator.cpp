@@ -6,6 +6,13 @@
 namespace simupy {
 namespace {
 
+/// A fast relay legitimately fires thousands of events; only this many
+/// landing on top of each other is chatter.
+constexpr long long kChatterLimit = 1000;
+
+/// In units of the time tolerance.
+constexpr double kChatterGap = 1000.0;
+
 double timeTolerance(const SolverSettings& s) {
     const double span = std::max(std::abs(s.stopTime - s.startTime), 1.0);
     return span * 1e-12;
@@ -83,6 +90,8 @@ void Simulator::initialize() {
     rejectedSteps_ = 0;
     derivativeEvals_ = 0;
     locatedEvents_ = 0;
+    collapsedEvents_ = 0;
+    lastEventTime_ = settings_.startTime;
     terminated_ = false;
     initialized_ = true;
 
@@ -552,6 +561,23 @@ bool Simulator::step() {
 
             solver_->invalidateCache();
             h_ = std::max(settings_.minStep, h_ * 0.25);
+
+            // Chatter is events collapsing onto each other, not merely many.
+            if (t_ - lastEventTime_ < kChatterGap * timeTolerance(settings_))
+                ++collapsedEvents_;
+            else
+                collapsedEvents_ = 0;
+            lastEventTime_ = t_;
+
+            if (collapsedEvents_ >= kChatterLimit)
+                throw ModelError(
+                    "the model is chattering at t = " + std::to_string(t_) +
+                    ": " + std::to_string(collapsedEvents_) +
+                    " zero crossings landed on top of one another while the "
+                    "clock barely moved.\n\nTwo switching surfaces are most "
+                    "likely fighting each other. Add hysteresis to the "
+                    "comparison, or a small dead band, so the model settles on "
+                    "one side.");
         }
     }
 

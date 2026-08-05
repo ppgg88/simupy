@@ -478,6 +478,49 @@ void testStiffSolverHonoursItsStepSettings() {
                "and the answer is still right");
 }
 
+void testChatteringModelIsStopped() {
+    beginTest("A chattering model is stopped instead of crawling forever");
+
+    // Relay feedback with no hysteresis: events fire without end.
+    Model model;
+    Block* relay = model.addBlock("PythonFunction", 0, 0);
+    relay->params().set("code", std::string(R"(
+from simupy import Block
+
+class Relay(Block):
+    inputs = ["e"]
+    outputs = ["u"]
+    zero_crossings = 1
+
+    def zero_crossing(self, t, u):
+        return u[0]
+
+    def output(self, t, u):
+        return -1e6 if u[0] > 0.0 else 1e6
+)"));
+    Block* integrator = model.addBlock("Integrator", 150, 0);
+    Block* scope = model.addBlock("Scope", 300, 0);
+    model.connect(relay->id(), 0, integrator->id(), 0);
+    model.connect(integrator->id(), 0, relay->id(), 0);
+    model.connect(integrator->id(), 0, scope->id(), 0);
+
+    model.solver().stopTime = 5.0;
+    model.solver().method = SolverSettings::Method::RK45;
+
+    std::string message;
+    try {
+        Simulator simulator(model, pythonExpressionEvaluator());
+        simulator.initialize();
+        simulator.run();
+    } catch (const ModelError& error) {
+        message = error.what();
+    }
+
+    check(!message.empty(), "the run is stopped rather than left to crawl");
+    check(message.find("chattering") != std::string::npos,
+          "and the message names chatter, not a tolerance problem: " + message);
+}
+
 void testSolverOrders() {
     beginTest("Fixed-step solvers reach their expected accuracy");
 
@@ -1017,6 +1060,7 @@ void runEngineTests() {
     runTest(testNonFiniteStateIsReported);
     runTest(testUnusableSolverSettingsAreRefused);
     runTest(testStiffSolverHonoursItsStepSettings);
+    runTest(testChatteringModelIsStopped);
     runTest(testSolverOrders);
     runTest(testStiffSolver);
     runTest(testSerializationRoundTrip);
