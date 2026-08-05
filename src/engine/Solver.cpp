@@ -162,8 +162,11 @@ public:
         constexpr double kMinFactor = 0.2;
         constexpr double kMaxFactor = 5.0;
 
+        // NaN compares false against everything: treat it as the worst error.
         double factor = kMaxFactor;
-        if (errorNorm > 1e-12)
+        if (!std::isfinite(errorNorm))
+            factor = kMinFactor;
+        else if (errorNorm > 1e-12)
             factor = kSafety * std::pow(errorNorm, -0.2);
         factor = std::clamp(factor, kMinFactor, kMaxFactor);
 
@@ -302,7 +305,9 @@ public:
 
         constexpr double kSafety = 0.9;
         double factor = 5.0;
-        if (errorNorm > 1e-12)
+        if (!std::isfinite(errorNorm))
+            factor = 0.2;               // see the note in DormandPrince45
+        else if (errorNorm > 1e-12)
             factor = kSafety * std::pow(errorNorm, -1.0 / 3.0);
         factor = std::clamp(factor, 0.2, 5.0);
 
