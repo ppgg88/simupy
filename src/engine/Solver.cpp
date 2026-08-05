@@ -6,6 +6,16 @@
 namespace simupy {
 namespace {
 
+/// Flagged, so the caller can name the cause rather than blame the tolerance.
+StepOutcome nonFiniteStep(double h) {
+    StepOutcome outcome;
+    outcome.accepted = false;
+    outcome.stepUsed = 0.0;
+    outcome.nextStep = h;
+    outcome.nonFinite = true;
+    return outcome;
+}
+
 class EulerSolver : public OdeSolver {
 public:
     const char* name() const override { return "Euler"; }
@@ -16,12 +26,14 @@ public:
         (void)force;
         k_.resize(x.size());
         f(t, x, k_);
-        x += h * k_;
+        next_ = x + h * k_;
+        if (!next_.allFinite()) return nonFiniteStep(h);
+        x = next_;
         return {true, h, h, 0.0};
     }
 
 private:
-    Vec k_;
+    Vec k_, next_;
 };
 
 class HeunSolver : public OdeSolver {
@@ -40,12 +52,14 @@ public:
         f(t, x, k1_);
         tmp_ = x + h * k1_;
         f(t + h, tmp_, k2_);
-        x += (h * 0.5) * (k1_ + k2_);
+        next_ = x + (h * 0.5) * (k1_ + k2_);
+        if (!next_.allFinite()) return nonFiniteStep(h);
+        x = next_;
         return {true, h, h, 0.0};
     }
 
 private:
-    Vec k1_, k2_, tmp_;
+    Vec k1_, k2_, tmp_, next_;
 };
 
 class RK4Solver : public OdeSolver {
@@ -71,12 +85,14 @@ public:
         tmp_ = x + h * k3_;
         f(t + h, tmp_, k4_);
 
-        x += (h / 6.0) * (k1_ + 2.0 * k2_ + 2.0 * k3_ + k4_);
+        next_ = x + (h / 6.0) * (k1_ + 2.0 * k2_ + 2.0 * k3_ + k4_);
+        if (!next_.allFinite()) return nonFiniteStep(h);
+        x = next_;
         return {true, h, h, 0.0};
     }
 
 private:
-    Vec k1_, k2_, k3_, k4_, tmp_;
+    Vec k1_, k2_, k3_, k4_, tmp_, next_;
 };
 
 class DormandPrince45 : public OdeSolver {
@@ -123,6 +139,11 @@ public:
 
         error_ = h * (e1 * k1_ + e3 * k3_ + e4 * k4_ + e5 * k5_ + e6 * k6_ +
                       e7 * k7_);
+
+        if (!solution_.allFinite()) {
+            hasCachedSlope_ = false;
+            return nonFiniteStep(h);
+        }
 
         double errorNorm = 0.0;
         for (Eigen::Index i = 0; i < n; ++i) {
@@ -261,6 +282,11 @@ public:
         solution_ = stage2_;
         error_ = (h * kGamma) * (k2_ - k1_);
 
+        if (!solution_.allFinite()) {
+            jacobianValid_ = false;
+            return nonFiniteStep(h);
+        }
+
         double errorNorm = 0.0;
         for (Eigen::Index i = 0; i < n; ++i) {
             const double scale =
@@ -300,6 +326,8 @@ private:
 
     StepOutcome rejection(double h) {
         jacobianValid_ = false;
+        // A non-finite residual is a diverging model, not a step too big.
+        if (stageNonFinite_) return nonFiniteStep(h);
         return {false, 0.0, std::max(h * 0.25, minStep_), 0.0};
     }
 
@@ -350,12 +378,16 @@ private:
     bool solveStage(const DerivativeFn& f, double tStage, const Vec& rhs,
                     double h, Vec& Y, Vec& k) {
         const double scale = h * kGamma;
+        stageNonFinite_ = false;
 
         for (int iteration = 1; iteration <= kMaxNewton; ++iteration) {
             f(tStage, Y, k);
             residual_ = Y - rhs - scale * k;
             increment_ = decomposition_.solve(-residual_);
-            if (!increment_.allFinite()) return false;
+            if (!increment_.allFinite()) {
+                stageNonFinite_ = true;
+                return false;
+            }
 
             Y += increment_;
             lastIterations_ = iteration;
@@ -376,6 +408,7 @@ private:
     Eigen::PartialPivLU<Mat> decomposition_;
     double factoredScale_ = 0.0;
     bool jacobianValid_ = false;
+    bool stageNonFinite_ = false;
     int lastIterations_ = 0;
 
     Vec stage1_, stage2_, rhs2_, k1_, k2_;

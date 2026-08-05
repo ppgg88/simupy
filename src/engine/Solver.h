@@ -15,6 +15,9 @@ struct StepOutcome {
     double stepUsed = 0.0;
     double nextStep = 0.0;
     double errorNorm = 0.0;
+
+    /// Non-finite state. Never accepted, not even under `force`.
+    bool nonFinite = false;
 };
 
 class OdeSolver {

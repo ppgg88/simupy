@@ -396,6 +396,14 @@ double Simulator::advanceOneStep(double tLimit) {
             return outcome.stepUsed;
         }
 
+        if (outcome.nonFinite)
+            throw ModelError(
+                "the state stopped being a number at t = " +
+                std::to_string(t_) +
+                ". A division by zero, a log or sqrt of a negative value, or a "
+                "model that diverges will do this.\n\nThe step before this one "
+                "was fine, so look at what changes across it.");
+
         ++rejectedSteps_;
         h_ = std::clamp(outcome.nextStep, settings_.minStep, maxStep);
         if (++consecutiveRejections > 50 ||

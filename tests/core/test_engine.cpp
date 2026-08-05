@@ -332,6 +332,52 @@ void testMismatchedLogicWidthRefused() {
     check(compiles("Logic", {4.0, 5.0, 6.0}), "Logic accepts matching widths");
 }
 
+void testNonFiniteStateIsReported() {
+    beginTest("A state that becomes NaN stops the run instead of spreading");
+
+    // Every comparison against NaN is false, so nothing downstream notices.
+    const auto failure = [](SolverSettings::Method method) {
+        Model model;
+        Block* source = model.addBlock("PythonFunction", 0, 0);
+        source->params().set("code", std::string(R"(
+class Block:
+    def output(self, t, u):
+        return 0.0 if t < 0.05 else float("nan")
+)"));
+        Block* integrator = model.addBlock("Integrator", 150, 0);
+        Block* scope = model.addBlock("Scope", 300, 0);
+        model.connect(source->id(), 0, integrator->id(), 0);
+        model.connect(integrator->id(), 0, scope->id(), 0);
+
+        model.solver().method = method;
+        model.solver().fixedStep = 0.01;
+        model.solver().stopTime = 0.2;
+
+        try {
+            Simulator simulator(model, pythonExpressionEvaluator());
+            simulator.initialize();
+            simulator.run();
+        } catch (const ModelError& error) {
+            return std::string(error.what());
+        }
+        return std::string();
+    };
+
+    for (const auto& [name, method] :
+         std::vector<std::pair<const char*, SolverSettings::Method>>{
+             {"RK45", SolverSettings::Method::RK45},
+             {"RK4", SolverSettings::Method::RK4},
+             {"Euler", SolverSettings::Method::Euler},
+             {"SDIRK2", SolverSettings::Method::SDIRK2}}) {
+        const std::string message = failure(method);
+        check(!message.empty(),
+              std::string(name) + " refuses to carry a NaN forward");
+        check(message.find("not a number") != std::string::npos ||
+                  message.find("stopped being a number") != std::string::npos,
+              std::string(name) + " says what actually went wrong");
+    }
+}
+
 void testSolverOrders() {
     beginTest("Fixed-step solvers reach their expected accuracy");
 
@@ -868,6 +914,7 @@ void runEngineTests() {
     runTest(testDiscreteUnitDelay);
     runTest(testVectorWidthPropagation);
     runTest(testMismatchedLogicWidthRefused);
+    runTest(testNonFiniteStateIsReported);
     runTest(testSolverOrders);
     runTest(testStiffSolver);
     runTest(testSerializationRoundTrip);
