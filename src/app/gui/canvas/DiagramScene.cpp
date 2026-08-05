@@ -9,6 +9,8 @@
 #include "io/ModelSerializer.h"
 #include "scripting/PythonEngine.h"
 
+#include <unordered_map>
+
 #include <QAction>
 #include <QClipboard>
 #include <QGuiApplication>
@@ -461,9 +463,16 @@ void DiagramScene::selectAll() {
 }
 
 void DiagramScene::applySignalWidths(const CompiledModel& compiled) {
+    // find() scans every block, so doing it per wire is quadratic.
+    std::unordered_map<std::string, const CompiledBlock*> byId;
+    byId.reserve(compiled.blocks.size());
+    for (const CompiledBlock& block : compiled.blocks)
+        byId.emplace(block.block->id(), &block);
+
     for (WireItem* wire : wireItems_) {
-        const CompiledBlock* source =
-            compiled.find(wire->sourceItem()->blockId().toStdString());
+        const auto found = byId.find(wire->sourceItem()->blockId().toStdString());
+        const CompiledBlock* source = found == byId.end() ? nullptr
+                                                          : found->second;
         if (!source ||
             wire->sourcePort() >= static_cast<int>(source->outputSignal.size()))
             continue;
