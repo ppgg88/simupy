@@ -376,6 +376,48 @@ void requireBroadcastable(const BlockSetup& s, int width, const char* verb) {
     }
 }
 
+class MinMaxBlock : public Block {
+public:
+    PortLayout ports() const override {
+        return {numberedPorts("in", std::max(1, params().integer("inputs", 2))),
+                {"out"}};
+    }
+
+    void setup(BlockSetup& s) override {
+        maximum_ = params().text("operation", "min") == "max";
+        int width = 1;
+        for (int i = 0; i < s.inputCount(); ++i)
+            if (s.inputConnected[i]) width = std::max(width, s.inputWidths[i]);
+        requireBroadcastable(s, width, "compares");
+        s.outputWidths[0] = width;
+    }
+
+    void computeOutputs(const EvalContext& c) override {
+        Vec& y = c.out(0);
+        if (c.nu == 0) {
+            y.setZero();
+            return;
+        }
+        // An input can still arrive empty, and u[0] would read off the end.
+        const auto spread = [&y](const Vec& u) {
+            if (u.size() == y.size()) return Vec(u);
+            return Vec(Vec::Constant(y.size(), u.size() > 0 ? u[0] : 0.0));
+        };
+
+        y = spread(c.in(0));
+        for (int i = 1; i < c.nu; ++i) {
+            const Vec broadcasted = spread(c.in(i));
+            if (maximum_)
+                y = y.cwiseMax(broadcasted);
+            else
+                y = y.cwiseMin(broadcasted);
+        }
+    }
+
+private:
+    bool maximum_ = false;
+};
+
 class RelationalOperatorBlock : public Block {
 public:
     PortLayout ports() const override { return {{"a", "b"}, {"out"}}; }

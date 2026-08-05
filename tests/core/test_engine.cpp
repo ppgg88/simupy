@@ -330,6 +330,10 @@ void testMismatchedLogicWidthRefused() {
     check(!compiles("Logic", {4.0, 5.0}), "Logic refuses 3 against 2");
     check(compiles("Logic", {4.0}), "Logic still broadcasts a scalar");
     check(compiles("Logic", {4.0, 5.0, 6.0}), "Logic accepts matching widths");
+
+    check(!compiles("MinMax", {4.0, 5.0}), "MinMax refuses 3 against 2");
+    check(compiles("MinMax", {4.0}), "MinMax still broadcasts a scalar");
+    check(compiles("MinMax", {4.0, 5.0, 6.0}), "MinMax accepts matching widths");
 }
 
 void testNonFiniteStateIsReported() {
