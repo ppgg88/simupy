@@ -75,8 +75,8 @@ void Simulator::initialize() {
     const double maxStep = settings_.effectiveMaxStep();
     h_ = settings_.initialStep > 0.0 ? settings_.initialStep : maxStep / 50.0;
     h_ = std::clamp(h_, settings_.minStep, maxStep);
-    if (settings_.method != SolverSettings::Method::RK45)
-        h_ = settings_.fixedStep;
+    // Ask the solver, not the method name: SDIRK2 is adaptive too.
+    if (!solver_->isAdaptive()) h_ = settings_.fixedStep;
 
     t_ = settings_.startTime;
     majorSteps_ = 0;

@@ -436,6 +436,44 @@ void testUnusableSolverSettingsAreRefused() {
     check(ran, "a minimum step above the maximum is pulled back, not refused");
 }
 
+void testStiffSolverHonoursItsStepSettings() {
+    beginTest("SDIRK2 starts on its own step settings, not the fixed step");
+
+    Model model;
+    Block* step = model.addBlock("Step", 0, 0);
+    step->params().set("stepTime", 0.0);
+    Block* plant = model.addBlock("TransferFcn", 200, 0);
+    plant->params().set("numerator", std::vector<double>{1.0});
+    plant->params().set("denominator", std::vector<double>{1.0, 1.0});
+    Block* scope = model.addBlock("Scope", 400, 0);
+    model.connect(step->id(), 0, plant->id(), 0);
+    model.connect(plant->id(), 0, scope->id(), 0);
+
+    model.solver().method = SolverSettings::Method::SDIRK2;
+    model.solver().stopTime = 1.0;
+    // A wide cap, so nothing but h_ itself decides the first step.
+    model.solver().maxStep = 1.0;
+    model.solver().initialStep = 1e-4;
+    model.solver().fixedStep = 0.5;
+
+    Simulator simulator(model, pythonExpressionEvaluator());
+    simulator.initialize();
+    simulator.run();
+
+    const std::vector<double>& times = simulator.log().times();
+    check(times.size() > 1, "the run logged more than its starting point");
+    if (times.size() < 2) return;
+
+    // Starting on fixedStep would attempt 0.5 s and reject its way down.
+    checkClose(times[1] - times[0], 1e-4, 1e-9,
+               "the first step is exactly initialStep");
+    check(simulator.rejectedSteps() == 0,
+          "and nothing was wasted rejecting an over-ambitious first step");
+
+    checkClose(runToEnd(model), 1.0 - std::exp(-1.0), 1e-4,
+               "and the answer is still right");
+}
+
 void testSolverOrders() {
     beginTest("Fixed-step solvers reach their expected accuracy");
 
@@ -974,6 +1012,7 @@ void runEngineTests() {
     runTest(testMismatchedLogicWidthRefused);
     runTest(testNonFiniteStateIsReported);
     runTest(testUnusableSolverSettingsAreRefused);
+    runTest(testStiffSolverHonoursItsStepSettings);
     runTest(testSolverOrders);
     runTest(testStiffSolver);
     runTest(testSerializationRoundTrip);
