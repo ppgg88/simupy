@@ -197,6 +197,14 @@ int runModel(std::vector<std::string> args) {
                   << " samples across " << simulator.log().channels().size()
                   << " channels\n";
 
+        if (simulator.smallestStep() > 0.0)
+            std::cout << "step     : " << simulator.smallestStep() << " to "
+                      << simulator.largestStep() << " s, worst error estimate "
+                      << simulator.worstErrorNorm() << " of tolerance\n";
+        if (simulator.locatedEvents() > 0)
+            std::cout << "events   : " << simulator.locatedEvents()
+                      << " located\n";
+
         if (paced) {
             if (pacer.heldRealTime())
                 std::cout << "real time held, worst lag "

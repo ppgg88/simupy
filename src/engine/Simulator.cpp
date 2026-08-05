@@ -92,6 +92,9 @@ void Simulator::initialize() {
     locatedEvents_ = 0;
     collapsedEvents_ = 0;
     lastEventTime_ = settings_.startTime;
+    smallestStep_ = 0.0;
+    largestStep_ = 0.0;
+    worstErrorNorm_ = 0.0;
     terminated_ = false;
     initialized_ = true;
 
@@ -427,6 +430,16 @@ double Simulator::advanceOneStep(double tLimit) {
         const StepOutcome outcome = solver_->step(derivativeFn_, t_, xc_, h);
 
         if (outcome.accepted) {
+            if (outcome.stepUsed > 0.0) {
+                smallestStep_ = smallestStep_ > 0.0
+                                    ? std::min(smallestStep_, outcome.stepUsed)
+                                    : outcome.stepUsed;
+                largestStep_ = std::max(largestStep_, outcome.stepUsed);
+                if (std::isfinite(outcome.errorNorm))
+                    worstErrorNorm_ =
+                        std::max(worstErrorNorm_, outcome.errorNorm);
+            }
+
             t_ += outcome.stepUsed;
             if (adaptive)
                 h_ = std::clamp(outcome.nextStep, settings_.minStep, maxStep);

@@ -36,6 +36,12 @@ public:
     long long rejectedSteps() const { return rejectedSteps_; }
     long long derivativeEvaluations() const { return derivativeEvals_; }
     long long locatedEvents() const { return locatedEvents_; }
+
+    /// A smallest step orders below the largest is the shape of a stiff run.
+    double smallestStep() const { return smallestStep_; }
+    double largestStep() const { return largestStep_; }
+    double worstErrorNorm() const { return worstErrorNorm_; }
+
     const char* solverName() const {
         return solver_ ? solver_->name() : "none";
     }
@@ -106,6 +112,10 @@ private:
     /// a chattering model.
     long long collapsedEvents_ = 0;
     double lastEventTime_ = 0.0;
+
+    double smallestStep_ = 0.0;
+    double largestStep_ = 0.0;
+    double worstErrorNorm_ = 0.0;
     bool initialized_ = false;
     bool terminated_ = false;
 };

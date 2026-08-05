@@ -554,6 +554,34 @@ void testDecimationKeepsSpikes() {
     check(ordered, "and the time axis is still strictly increasing");
 }
 
+void testStepDiagnosticsAreReported() {
+    beginTest("A run reports the spread of steps it actually took");
+
+    Model model;
+    Block* step = model.addBlock("Step", 0, 0);
+    step->params().set("stepTime", 0.0);
+    Block* plant = model.addBlock("TransferFcn", 200, 0);
+    plant->params().set("numerator", std::vector<double>{1.0});
+    // Two time constants three decades apart.
+    plant->params().set("denominator", std::vector<double>{1.0, 1001.0, 1000.0});
+    Block* scope = model.addBlock("Scope", 400, 0);
+    model.connect(step->id(), 0, plant->id(), 0);
+    model.connect(plant->id(), 0, scope->id(), 0);
+    model.solver().stopTime = 2.0;
+
+    Simulator simulator(model, pythonExpressionEvaluator());
+    simulator.initialize();
+    simulator.run();
+
+    check(simulator.smallestStep() > 0.0, "a smallest step was recorded");
+    check(simulator.largestStep() >= simulator.smallestStep(),
+          "and it is no larger than the largest");
+    check(simulator.largestStep() > simulator.smallestStep(),
+          "which differ, as they must on a two-timescale plant");
+    check(simulator.worstErrorNorm() > 0.0,
+          "and the worst accepted error estimate is reported");
+}
+
 void testSolverOrders() {
     beginTest("Fixed-step solvers reach their expected accuracy");
 
@@ -1095,6 +1123,7 @@ void runEngineTests() {
     runTest(testStiffSolverHonoursItsStepSettings);
     runTest(testChatteringModelIsStopped);
     runTest(testDecimationKeepsSpikes);
+    runTest(testStepDiagnosticsAreReported);
     runTest(testSolverOrders);
     runTest(testStiffSolver);
     runTest(testSerializationRoundTrip);
