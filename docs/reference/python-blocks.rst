@@ -90,6 +90,19 @@ read-only; write state by returning it from ``derivative()`` or ``update()``.
 ``u`` is always a list of arrays, one per input port. Return a scalar or array
 for a single output, or a list of them for several.
 
+.. warning::
+
+   The arrays in ``u`` are views onto the engine's signal buffers and are
+   valid **for the duration of the call only**. Keeping one — the classic
+   ``self.history.append(u[0])`` — stores a window onto memory the engine
+   reuses on the next step, so what you read back later is not what you put
+   there. Copy anything you intend to keep::
+
+       self.history.append(u[0].copy())
+
+   ``self.x`` and ``self.xd`` do survive being kept this way, but ``.copy()``
+   is the habit worth having for all of them.
+
 ``self.params`` is a dict built from the block's :guilabel:`Parameters` field,
 which is plain Python (``tau = 0.5``, ``gains = np.array([1, 2, 3])``), so the
 same script can be reused with different values. A block saved into a library

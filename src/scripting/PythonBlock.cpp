@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <memory>
 
 namespace py = pybind11;
 
@@ -33,6 +34,26 @@ py::object viewOf(const double* data, Eigen::Index size, bool writable) {
     auto keepAlive = py::capsule(const_cast<double*>(data), [](void*) {});
     py::array_t<double> array({size}, {static_cast<Eigen::Index>(sizeof(double))},
                               data, keepAlive);
+    if (!writable) array.attr("setflags")(py::arg("write") = false);
+    return array;
+}
+
+/// Owning: the capsule holds the buffer, so a kept `self.x` does not dangle.
+py::object viewOf(const std::shared_ptr<Vec>& buffer, bool writable) {
+    if (!buffer || buffer->size() <= 0) {
+        py::array_t<double> empty(static_cast<py::ssize_t>(0));
+        if (!writable) empty.attr("setflags")(py::arg("write") = false);
+        return empty;
+    }
+
+    auto* owner = new std::shared_ptr<Vec>(buffer);
+    auto keepAlive = py::capsule(owner, [](void* held) {
+        delete static_cast<std::shared_ptr<Vec>*>(held);
+    });
+
+    py::array_t<double> array(
+        {buffer->size()}, {static_cast<Eigen::Index>(sizeof(double))},
+        buffer->data(), keepAlive);
     if (!writable) array.attr("setflags")(py::arg("write") = false);
     return array;
 }
@@ -100,7 +121,7 @@ struct SIMUPY_HIDDEN PythonBlock::Impl {
     py::object instance;
     py::object outputFn, derivativeFn, updateFn, zeroCrossingFn;
 
-    Vec stateBuffer, discreteBuffer;
+    std::shared_ptr<Vec> stateBuffer, discreteBuffer;
     py::object stateView, discreteView;
 
     py::object inputList;
@@ -388,12 +409,12 @@ void PythonBlock::setup(BlockSetup& s) {
         s.sampleTime = sampleTime;
         s.directFeedthrough.assign(s.inputCount(), feedthrough);
 
-        impl_->stateBuffer = Vec::Zero(impl_->continuousStates);
-        impl_->discreteBuffer = Vec::Zero(impl_->discreteStates);
-        impl_->stateView = viewOf(impl_->stateBuffer.data(),
-                                  impl_->stateBuffer.size(), false);
-        impl_->discreteView = viewOf(impl_->discreteBuffer.data(),
-                                     impl_->discreteBuffer.size(), false);
+        impl_->stateBuffer =
+            std::make_shared<Vec>(Vec::Zero(impl_->continuousStates));
+        impl_->discreteBuffer =
+            std::make_shared<Vec>(Vec::Zero(impl_->discreteStates));
+        impl_->stateView = viewOf(impl_->stateBuffer, false);
+        impl_->discreteView = viewOf(impl_->discreteBuffer, false);
         instance.attr("x") = impl_->stateView;
         instance.attr("xd") = impl_->discreteView;
 
@@ -461,10 +482,10 @@ void PythonBlock::computeOutputs(const EvalContext& c) {
 
         if (impl_->continuousStates > 0)
             std::copy(c.xc, c.xc + impl_->continuousStates,
-                      impl_->stateBuffer.data());
+                      impl_->stateBuffer->data());
         if (impl_->discreteStates > 0)
             std::copy(c.xd, c.xd + impl_->discreteStates,
-                      impl_->discreteBuffer.data());
+                      impl_->discreteBuffer->data());
 
         py::object result = impl_->outputFn(c.t, impl_->inputList);
 
@@ -500,7 +521,7 @@ void PythonBlock::computeDerivatives(const EvalContext& c,
     ScopedGil gil;
     try {
         std::copy(c.xc, c.xc + impl_->continuousStates,
-                  impl_->stateBuffer.data());
+                  impl_->stateBuffer->data());
         py::object result = impl_->derivativeFn(c.t, impl_->inputList);
         if (result.is_none())
             dxc.setZero();
@@ -522,7 +543,7 @@ void PythonBlock::updateDiscrete(const EvalContext& c,
     ScopedGil gil;
     try {
         std::copy(c.xd, c.xd + impl_->discreteStates,
-                  impl_->discreteBuffer.data());
+                  impl_->discreteBuffer->data());
         py::object result = impl_->updateFn(c.t, impl_->inputList);
         if (result.is_none())
             xdNext = c.xdisc();
@@ -545,7 +566,7 @@ void PythonBlock::computeZeroCrossings(const EvalContext& c,
     try {
         if (impl_->continuousStates > 0)
             std::copy(c.xc, c.xc + impl_->continuousStates,
-                      impl_->stateBuffer.data());
+                      impl_->stateBuffer->data());
         py::object result = impl_->zeroCrossingFn(c.t, impl_->inputList);
         if (result.is_none())
             zc.setZero();

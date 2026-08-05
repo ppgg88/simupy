@@ -25,6 +25,17 @@ The solver sets ``self.x`` (continuous state) and ``self.xd`` (discrete
 state) to NumPy arrays that view the engine's own buffers before each call,
 so reading them is free. Write to them only through the return values of
 :meth:`derivative` and :meth:`update`.
+
+The ``u`` handed to :meth:`output` and friends is a list of views onto the
+engine's signal buffers, valid **for the duration of the call only**. Keeping
+one past the call — ``self.history.append(u[0])`` — stores a window onto
+memory the engine reuses, so the value read back later is whatever the
+simulation has since put there. Copy what you want to keep::
+
+    self.history.append(u[0].copy())
+
+``self.x`` and ``self.xd`` survive being kept, but the same rule is the safe
+habit for both.
 """
 
 import numpy as np
