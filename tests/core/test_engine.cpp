@@ -6,6 +6,7 @@
 #include "blocks/SinkBlocks.h"
 #include "blocks/SubsystemBlock.h"
 #include "engine/RealTimePacer.h"
+#include "engine/SignalLog.h"
 #include "engine/Simulator.h"
 #include "io/CustomBlock.h"
 #include "io/LibrarySerializer.h"
@@ -519,6 +520,38 @@ class Relay(Block):
     check(!message.empty(), "the run is stopped rather than left to crawl");
     check(message.find("chattering") != std::string::npos,
           "and the message names chatter, not a tolerance problem: " + message);
+}
+
+void testDecimationKeepsSpikes() {
+    beginTest("Decimating a long log keeps the peaks, not just every other sample");
+
+    SignalLog log;
+    LogChannel channel;
+    channel.blockName = "probe";
+    channel.portName = "in";
+    channel.width = 1;
+    log.configure({channel}, 16);
+
+    // A single spike on an odd index: the sample halving used to drop it.
+    Vec value(1);
+    const std::vector<const Vec*> sources{&value};
+    const int spikeAt = 7;
+    for (int i = 0; i < 16; ++i) {
+        value[0] = (i == spikeAt) ? 100.0 : 0.0;
+        log.append(static_cast<double>(i), sources);
+    }
+
+    check(log.decimation() > 1, "the cap was reached and the log halved");
+
+    double peak = 0.0;
+    for (int i = 0; i < log.sampleCount(); ++i)
+        peak = std::max(peak, log.channels().front().at(i, 0));
+    checkClose(peak, 100.0, 1e-12, "the spike survived the halving");
+
+    bool ordered = true;
+    for (int i = 1; i < log.sampleCount(); ++i)
+        if (log.times()[i] <= log.times()[i - 1]) ordered = false;
+    check(ordered, "and the time axis is still strictly increasing");
 }
 
 void testSolverOrders() {
@@ -1061,6 +1094,7 @@ void runEngineTests() {
     runTest(testUnusableSolverSettingsAreRefused);
     runTest(testStiffSolverHonoursItsStepSettings);
     runTest(testChatteringModelIsStopped);
+    runTest(testDecimationKeepsSpikes);
     runTest(testSolverOrders);
     runTest(testStiffSolver);
     runTest(testSerializationRoundTrip);
