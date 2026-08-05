@@ -37,7 +37,7 @@ struct MethodEntry {
 };
 
 constexpr MethodEntry kMethods[] = {
-    {"rk45", "Dormand-Prince 4(5) — variable step, explicit"},
+    {"rk45", "Dormand-Prince 5(4) — variable step, explicit"},
     {"sdirk2", "SDIRK2 — variable step, implicit (stiff models)"},
     {"rk4", "Runge-Kutta 4 — fixed step"},
     {"heun", "Heun (RK2) — fixed step"},

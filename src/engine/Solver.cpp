@@ -100,7 +100,7 @@ public:
     DormandPrince45(double relTol, double absTol, double minStep)
         : relTol_(relTol), absTol_(absTol), minStep_(minStep) {}
 
-    const char* name() const override { return "Dormand-Prince 4(5)"; }
+    const char* name() const override { return "Dormand-Prince 5(4)"; }
     bool isAdaptive() const override { return true; }
     int order() const override { return 5; }
 

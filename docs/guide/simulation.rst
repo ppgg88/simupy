@@ -12,7 +12,7 @@ Choosing a solver
    * - Method
      - Order
      - Notes
-   * - Dormand-Prince 4(5)
+   * - Dormand-Prince 5(4)
      - 5
      - Adaptive step with error control. The default.
    * - SDIRK2
