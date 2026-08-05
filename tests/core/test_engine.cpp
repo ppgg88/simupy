@@ -378,6 +378,64 @@ class Block:
     }
 }
 
+void testUnusableSolverSettingsAreRefused() {
+    beginTest("Solver settings that cannot work are refused up front");
+
+    const auto rejects = [](void (*spoil)(SolverSettings&)) {
+        Model model;
+        Block* source = model.addBlock("Constant", 0, 0);
+        Block* integrator = model.addBlock("Integrator", 150, 0);
+        Block* scope = model.addBlock("Scope", 300, 0);
+        model.connect(source->id(), 0, integrator->id(), 0);
+        model.connect(integrator->id(), 0, scope->id(), 0);
+        model.solver().stopTime = 0.2;
+        spoil(model.solver());
+
+        try {
+            Simulator simulator(model, pythonExpressionEvaluator());
+            simulator.initialize();
+            simulator.run();
+        } catch (const ModelError&) {
+            return true;
+        }
+        return false;
+    };
+
+    check(rejects([](SolverSettings& s) { s.fixedStep = 0.0; }),
+          "a zero fixed step is refused");
+    check(rejects([](SolverSettings& s) { s.minStep = 0.0; }),
+          "a zero minimum step is refused");
+    check(rejects([](SolverSettings& s) { s.relTol = 0.0; }),
+          "a zero relative tolerance is refused");
+    check(rejects([](SolverSettings& s) { s.absTol = -1.0; }),
+          "a negative absolute tolerance is refused");
+    check(rejects([](SolverSettings& s) { s.maxLoopIterations = 0; }),
+          "zero loop iterations is refused");
+    check(rejects([](SolverSettings& s) { s.loopTolerance = 0.0; }),
+          "a zero loop tolerance is refused");
+
+    // An inverted clamp range is UB, but the run is still meaningful.
+    Model model;
+    Block* source = model.addBlock("Constant", 0, 0);
+    Block* integrator = model.addBlock("Integrator", 150, 0);
+    Block* scope = model.addBlock("Scope", 300, 0);
+    model.connect(source->id(), 0, integrator->id(), 0);
+    model.connect(integrator->id(), 0, scope->id(), 0);
+    model.solver().stopTime = 0.2;
+    model.solver().maxStep = 0.01;
+    model.solver().minStep = 1.0;
+
+    bool ran = false;
+    try {
+        Simulator simulator(model, pythonExpressionEvaluator());
+        simulator.initialize();
+        simulator.run();
+        ran = true;
+    } catch (const ModelError&) {
+    }
+    check(ran, "a minimum step above the maximum is pulled back, not refused");
+}
+
 void testSolverOrders() {
     beginTest("Fixed-step solvers reach their expected accuracy");
 
@@ -915,6 +973,7 @@ void runEngineTests() {
     runTest(testVectorWidthPropagation);
     runTest(testMismatchedLogicWidthRefused);
     runTest(testNonFiniteStateIsReported);
+    runTest(testUnusableSolverSettingsAreRefused);
     runTest(testSolverOrders);
     runTest(testStiffSolver);
     runTest(testSerializationRoundTrip);

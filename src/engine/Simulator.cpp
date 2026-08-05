@@ -11,6 +11,34 @@ double timeTolerance(const SolverSettings& s) {
     return span * 1e-12;
 }
 
+/// A .spy is hand-editable JSON, and nothing checked these on the way in.
+void validate(const SolverSettings& s) {
+    const auto require = [](bool ok, const char* what) {
+        if (!ok) throw ModelError(std::string("the solver settings are not "
+                                              "usable: ") + what);
+    };
+
+    if (!s.unbounded)
+        require(s.stopTime > s.startTime,
+                "stop time must be greater than start time");
+
+    require(s.fixedStep > 0.0,
+            "the fixed step must be greater than zero — at zero the clock "
+            "advances without the state ever being integrated");
+    require(s.minStep > 0.0, "the minimum step must be greater than zero");
+    require(s.maxStep >= 0.0,
+            "the maximum step cannot be negative (use zero for automatic)");
+    require(s.relTol > 0.0, "the relative tolerance must be greater than zero");
+    require(s.absTol > 0.0, "the absolute tolerance must be greater than zero");
+    require(s.maxLoopIterations >= 1,
+            "an algebraic loop needs at least one iteration");
+    require(s.loopTolerance > 0.0,
+            "the algebraic loop tolerance must be greater than zero");
+    if (s.realTime)
+        require(s.realTimeFactor > 0.0,
+                "the real-time factor must be greater than zero");
+}
+
 }
 
 Simulator::Simulator(Model& model, ExpressionEvaluator evaluate)
@@ -30,8 +58,10 @@ void Simulator::initialize() {
     compiled_ = Scheduler::compile(model_, evaluate_);
     settings_ = model_.solver();
 
-    if (!settings_.unbounded && settings_.stopTime <= settings_.startTime)
-        throw ModelError("stop time must be greater than start time");
+    validate(settings_);
+
+    // std::clamp is undefined when the low bound exceeds the high one.
+    settings_.minStep = std::min(settings_.minStep, settings_.effectiveMaxStep());
 
     allocate();
 
