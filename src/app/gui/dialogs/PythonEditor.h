@@ -5,7 +5,9 @@
 
 #include <functional>
 
+class QDialogButtonBox;
 class QLabel;
+class QPushButton;
 
 namespace simupy {
 
@@ -46,12 +48,17 @@ public:
 
     void setValidator(std::function<QString(const QString&)> validator);
 
+    void setReadOnly(bool readOnly);
+
 private:
     void runCheck(bool quiet);
 
     CodeEditor* editor_;
     PythonHighlighter* highlighter_;
     QLabel* status_;
+    QLabel* note_;
+    QDialogButtonBox* buttons_;
+    QPushButton* check_;
     std::function<QString(const QString&)> validator_;
 };
 

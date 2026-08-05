@@ -207,22 +207,36 @@ PythonEditor::PythonEditor(QWidget* parent) : QDialog(parent) {
     status_->setFont(theme::monospaceFont(9));
     status_->setMinimumHeight(20);
 
-    auto* buttons = new QDialogButtonBox(
-        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
-    QPushButton* check = buttons->addButton(tr("Check"),
-                                            QDialogButtonBox::ActionRole);
-    check->setToolTip(tr("Compile the code without running the simulation"));
+    note_ = new QLabel(
+        tr("A run is in flight, so the source is read-only."), this);
+    note_->setStyleSheet(QStringLiteral("color: palette(placeholder-text);"));
+    note_->setVisible(false);
 
-    connect(check, &QPushButton::clicked, this, [this] { runCheck(false); });
-    connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    buttons_ = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    check_ = buttons_->addButton(tr("Check"), QDialogButtonBox::ActionRole);
+    check_->setToolTip(tr("Compile the code without running the simulation"));
+
+    connect(check_, &QPushButton::clicked, this, [this] { runCheck(false); });
+    connect(buttons_, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    connect(buttons_, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(10, 10, 10, 10);
     layout->setSpacing(8);
     layout->addWidget(editor_, 1);
     layout->addWidget(status_);
-    layout->addWidget(buttons);
+    layout->addWidget(note_);
+    layout->addWidget(buttons_);
+}
+
+void PythonEditor::setReadOnly(bool readOnly) {
+    editor_->setReadOnly(readOnly);
+    note_->setVisible(readOnly);
+    check_->setVisible(!readOnly);
+    buttons_->setStandardButtons(readOnly ? QDialogButtonBox::Close
+                                          : QDialogButtonBox::Ok |
+                                                QDialogButtonBox::Cancel);
 }
 
 void PythonEditor::setSource(const QString& source) {

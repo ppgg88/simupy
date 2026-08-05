@@ -1068,6 +1068,13 @@ void MainWindow::editPythonSource(const QString& blockId,
     editor.setSource(
         QString::fromStdString(block->params().text(paramName.toStdString())));
 
+    // The simulation thread reads these parameters; checking writes them.
+    if (controller_->isBusy()) {
+        editor.setReadOnly(true);
+        editor.exec();
+        return;
+    }
+
     const bool isSource = paramName == QLatin1String("code");
     if (isSource) {
         editor.setValidator([block](const QString& source) -> QString {
