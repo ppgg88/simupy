@@ -248,7 +248,9 @@ public:
     bool isAdaptive() const override { return true; }
     int order() const override { return 2; }
 
-    void invalidateCache() override { jacobianValid_ = false; }
+    /// Nothing to drop: the caller means a cached slope, which this solver
+    /// has none of. Newton refreshes the Jacobian itself when it struggles.
+    void invalidateCache() override {}
 
     StepOutcome step(const DerivativeFn& f, double t, Vec& x, double h,
                      bool force) override {

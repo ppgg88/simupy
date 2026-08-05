@@ -613,6 +613,48 @@ void testWidthPropagatesAgainstBlockOrder() {
           "the eight-wide signal reached the far end of the chain");
 }
 
+void testStiffSolverKeepsItsJacobianAcrossSamples() {
+    beginTest("A discrete update does not throw away the stiff Jacobian");
+
+    Model model;
+    Block* step = model.addBlock("Step", 0, 0);
+    step->params().set("stepTime", 0.0);
+    Block* plant = model.addBlock("TransferFcn", 200, 0);
+    plant->params().set("numerator", std::vector<double>{1.0});
+    plant->params().set("denominator", std::vector<double>{1.0, 1001.0, 1000.0});
+    Block* delay = model.addBlock("UnitDelay", 400, 0);
+    delay->params().set("sampleTime", 0.001);
+    Block* scope = model.addBlock("Scope", 600, 0);
+
+    model.connect(step->id(), 0, plant->id(), 0);
+    model.connect(plant->id(), 0, delay->id(), 0);
+    model.connect(delay->id(), 0, scope->id(), 0);
+
+    model.solver().method = SolverSettings::Method::SDIRK2;
+    model.solver().stopTime = 2.0;
+
+    Simulator simulator(model, pythonExpressionEvaluator());
+    simulator.initialize();
+    simulator.run();
+
+    check(simulator.compiled().totalDiscreteStates > 0,
+          "the model really does carry a discrete state");
+    check(simulator.majorSteps() > 0, "and it ran");
+    if (simulator.majorSteps() == 0) return;
+
+    // 8.9 evaluations per step before, 6.0 after.
+    const double perStep = static_cast<double>(simulator.derivativeEvaluations()) /
+                           static_cast<double>(simulator.majorSteps());
+    check(perStep < 7.5,
+          "the Jacobian survives the sample hits (" + std::to_string(perStep) +
+              " derivative evaluations per step)");
+
+    // 1/((s+1)(s+1000)) under a unit step, still climbing at t = 2.
+    const double expected = 1e-3 * (1.0 - (1000.0 * std::exp(-2.0) -
+                                           std::exp(-2000.0)) / 999.0);
+    checkClose(runToEnd(model), expected, 1e-6, "and the answer is still right");
+}
+
 void testSolverOrders() {
     beginTest("Fixed-step solvers reach their expected accuracy");
 
@@ -1156,6 +1198,7 @@ void runEngineTests() {
     runTest(testDecimationKeepsSpikes);
     runTest(testStepDiagnosticsAreReported);
     runTest(testWidthPropagatesAgainstBlockOrder);
+    runTest(testStiffSolverKeepsItsJacobianAcrossSamples);
     runTest(testSolverOrders);
     runTest(testStiffSolver);
     runTest(testSerializationRoundTrip);
