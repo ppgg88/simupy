@@ -251,9 +251,18 @@ private:
                     int sourceBlock = 0;
                     int sourcePort = 0;
                     if (resolveSource(source, wire->sourcePort, scope.get(),
-                                      sourceBlock, sourcePort))
+                                      sourceBlock, sourcePort)) {
                         flat_.connections.push_back(
                             {sourceBlock, sourcePort, target->second, port});
+                    } else {
+                        flat_.warnings.push_back(
+                            "the wire into '" + scope->prefix + block->name() +
+                            "' port " + std::to_string(port + 1) + " (" +
+                            layout.inputs[port] +
+                            ") leads nowhere: it was dropped and that input "
+                            "reads zero. A subsystem outport with nothing "
+                            "wired to it inside is the usual cause.");
+                    }
                 }
             }
         }

@@ -729,6 +729,19 @@ bool MainWindow::openFile(const QString& path) {
                                .arg(sources.join(QStringLiteral("', '")))));
     }
 
+    if (!report.droppedConnections.empty()) {
+        console_->appendError(
+            tr("%1 describes %n wire(s) that could not be recreated. The "
+               "inputs they fed now read zero, so the model will simulate but "
+               "not as it was drawn:",
+               nullptr,
+               static_cast<int>(report.droppedConnections.size()))
+                .arg(QFileInfo(path).fileName()));
+        for (const std::string& dropped : report.droppedConnections)
+            console_->appendError(
+                QStringLiteral("  ") + QString::fromStdString(dropped));
+    }
+
     statusLabel_->setText(tr("Opened %1").arg(QFileInfo(path).fileName()));
     return true;
 }
@@ -1356,7 +1369,12 @@ void MainWindow::stopSimulation() {
 }
 
 void MainWindow::onCompiled(CompiledModelPtr compiled) {
-    if (compiled) scene_->applySignalWidths(*compiled);
+    if (!compiled) return;
+    scene_->applySignalWidths(*compiled);
+
+    // A dropped wire leaves an input reading zero: the run is not the diagram.
+    for (const std::string& warning : compiled->warnings)
+        console_->appendError(QString::fromStdString(warning));
 }
 
 void MainWindow::onProgressed(double time, double fraction) {

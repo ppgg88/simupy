@@ -26,8 +26,14 @@ ParamSpec decodeParamSpec(const json& node);
 json encodeContents(const Model& model,
                     const std::set<std::string>* only = nullptr);
 
+struct DecodeReport {
+    std::vector<std::string> missingTypes;
+
+    std::vector<std::string> droppedConnections;
+};
+
 void decodeContents(const json& document, Model& model,
-                    std::vector<std::string>* missingTypes = nullptr);
+                    DecodeReport* report = nullptr);
 
 /// Turns anything a malformed document throws into ModelError, the one type
 /// callers catch.

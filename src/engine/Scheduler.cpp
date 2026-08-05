@@ -86,6 +86,7 @@ CompiledModel Scheduler::compile(Model& model,
     const FlatModel flat = flattenModel(model, evaluate);
 
     CompiledModel compiled;
+    compiled.warnings = flat.warnings;
     const int blockCount = static_cast<int>(flat.blocks.size());
     if (blockCount == 0) throw ModelError("the model is empty");
 
@@ -110,9 +111,17 @@ CompiledModel Scheduler::compile(Model& model,
     for (const FlatConnection& c : flat.connections) {
         CompiledBlock& target = compiled.blocks[c.targetBlock];
         const CompiledBlock& source = compiled.blocks[c.sourceBlock];
+        // A port that no longer exists, after a parameter changed the count.
         if (c.targetPort >= static_cast<int>(target.inputSignal.size()) ||
-            c.sourcePort >= static_cast<int>(source.outputSignal.size()))
+            c.sourcePort >= static_cast<int>(source.outputSignal.size())) {
+            compiled.warnings.push_back(
+                "the wire from '" + source.path + "' port " +
+                std::to_string(c.sourcePort + 1) + " to '" + target.path +
+                "' port " + std::to_string(c.targetPort + 1) +
+                " points at a port that no longer exists: it was dropped and "
+                "that input reads zero.");
             continue;
+        }
         target.inputSignal[c.targetPort] = source.outputSignal[c.sourcePort];
     }
 

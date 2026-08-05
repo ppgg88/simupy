@@ -24,6 +24,9 @@ struct FlatConnection {
 struct FlatModel {
     std::vector<FlatBlock> blocks;
     std::vector<FlatConnection> connections;
+
+    /// Wires with no resolvable producer; their inputs read zeros.
+    std::vector<std::string> warnings;
 };
 
 /// Injected: expressions are Python, and this layer must not depend on it.

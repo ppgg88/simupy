@@ -178,7 +178,7 @@ std::string substituteType(const json& node) {
 }
 
 void decodeContents(const json& document, Model& model,
-                    std::vector<std::string>* missingTypes) {
+                    DecodeReport* report) {
     BlockRegistry& registry = BlockRegistry::instance();
 
     for (const json& node : document.value("blocks", json::array())) {
@@ -191,10 +191,11 @@ void decodeContents(const json& document, Model& model,
                 throw ModelError("unknown block type '" + type +
                                  "' — the file needs a block library you do "
                                  "not have installed");
-            if (missingTypes &&
-                std::find(missingTypes->begin(), missingTypes->end(), type) ==
-                    missingTypes->end())
-                missingTypes->push_back(type);
+            if (report &&
+                std::find(report->missingTypes.begin(),
+                          report->missingTypes.end(),
+                          type) == report->missingTypes.end())
+                report->missingTypes.push_back(type);
         }
 
         BlockPtr block = registry.create(effectiveType);
@@ -223,7 +224,7 @@ void decodeContents(const json& document, Model& model,
             if (node.contains("contents")) {
                 subsystem->contents().clear();
                 decodeContents(node["contents"], subsystem->contents(),
-                               missingTypes);
+                               report);
             }
         }
     }
@@ -233,8 +234,17 @@ void decodeContents(const json& document, Model& model,
         const json& target = node.value("target", json::object());
         const std::string sourceBlock = source.value("block", std::string());
         const std::string targetBlock = target.value("block", std::string());
-        if (!model.block(sourceBlock) || !model.block(targetBlock))
+
+        auto dropped = [&](const std::string& why) {
+            if (report)
+                report->droppedConnections.push_back(
+                    "'" + sourceBlock + "' to '" + targetBlock + "': " + why);
+        };
+
+        if (!model.block(sourceBlock) || !model.block(targetBlock)) {
+            dropped("one end of the wire is a block the file does not define");
             continue;
+        }
 
         try {
             const Connection& connection =
@@ -247,7 +257,8 @@ void decodeContents(const json& document, Model& model,
                         waypoints.emplace_back(point[0].get<double>(),
                                                point[1].get<double>());
             }
-        } catch (const ModelError&) {
+        } catch (const ModelError& error) {
+            dropped(error.what());
         }
     }
 }

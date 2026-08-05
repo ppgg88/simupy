@@ -129,7 +129,12 @@ int runModel(std::vector<std::string> args) {
         });
 
     Model model;
-    ModelSerializer::load(model, path);
+    LoadReport report;
+    ModelSerializer::load(model, path, &report);
+
+    for (const std::string& dropped : report.droppedConnections)
+        std::cerr << "warning: dropped wire " << dropped
+                  << " — that input reads zero\n";
 
     if (stopTime > 0.0) model.solver().stopTime = stopTime;
     if (fixedStep > 0.0) model.solver().fixedStep = fixedStep;
@@ -144,6 +149,9 @@ int runModel(std::vector<std::string> args) {
 
     Simulator simulator(model, pythonExpressionEvaluator());
     simulator.initialize();
+
+    for (const std::string& warning : simulator.compiled().warnings)
+        std::cerr << "warning: " << warning << '\n';
 
     RealTimePacer pacer(model.solver().startTime, model.solver().realTimeFactor);
     const bool paced = model.solver().realTime;

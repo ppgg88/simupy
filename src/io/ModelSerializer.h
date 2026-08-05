@@ -10,13 +10,17 @@ namespace simupy {
 struct LoadReport {
     std::vector<std::string> missingTypes;
 
+    std::vector<std::string> droppedConnections;
+
     struct Requirement {
         std::string library;
         int revision = 0;
     };
     std::vector<Requirement> requires_;
 
-    bool clean() const { return missingTypes.empty(); }
+    bool clean() const {
+        return missingTypes.empty() && droppedConnections.empty();
+    }
 };
 
 class ModelSerializer {

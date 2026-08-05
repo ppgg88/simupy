@@ -362,6 +362,49 @@ void testFailedSaveKeepsThePreviousFile() {
     fs::remove_all(dir, code);
 }
 
+void testDroppedWiresAreReported() {
+    beginTest("A wire that cannot be recreated is named, not silently lost");
+
+    const char* text = R"({"format":"simupy-model","version":1,
+        "blocks":[{"id":"b1","type":"Constant"}],
+        "connections":[{"source":{"block":"b1","port":0},
+                        "target":{"block":"ghost","port":0}}]})";
+
+    Model model;
+    LoadReport report;
+    ModelSerializer::fromJson(text, model, &report);
+
+    check(report.droppedConnections.size() == 1, "the dropped wire is reported");
+    check(!report.clean(), "and the report no longer calls itself clean");
+    if (!report.droppedConnections.empty())
+        check(report.droppedConnections[0].find("ghost") != std::string::npos,
+              "naming the end that could not be found");
+}
+
+void testUnresolvableSubsystemWireWarns() {
+    beginTest("A subsystem outport with nothing inside warns at compile");
+
+    Model model;
+    Block* subsystem = model.addBlock("Subsystem", 0, 0);
+    Block* scope = model.addBlock("Scope", 300, 0);
+
+    // An outport nothing feeds: the wire is dropped and the Scope reads zeros.
+    Model& inner = dynamic_cast<SubsystemBlock*>(subsystem)->contents();
+    inner.addBlock("Outport", 0, 0);
+
+    model.connect(subsystem->id(), 0, scope->id(), 0);
+    model.solver().stopTime = 0.1;
+
+    Simulator simulator(model, pythonExpressionEvaluator());
+    simulator.initialize();
+
+    const std::vector<std::string>& warnings = simulator.compiled().warnings;
+    check(!warnings.empty(), "the unresolvable wire is reported");
+    if (!warnings.empty())
+        check(warnings[0].find("reads zero") != std::string::npos,
+              "and says what the input does instead");
+}
+
 void runIoTests() {
     runTest(testCopyPasteRoundTrip);
     runTest(testCopyDropsHalfWires);
@@ -371,5 +414,7 @@ void runIoTests() {
     runTest(testMalformedModelReportsRatherThanEscapes);
     runTest(testMalformedLibraryIsSkippedNotFatal);
     runTest(testFailedSaveKeepsThePreviousFile);
+    runTest(testDroppedWiresAreReported);
+    runTest(testUnresolvableSubsystemWireWarns);
     runTest(testLibrarySearchPathSplitting);
 }

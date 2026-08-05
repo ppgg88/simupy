@@ -109,12 +109,13 @@ void ModelSerializer::fromJson(const std::string& text, Model& model,
     model.setInitScript(document.value("initScript", std::string()));
     if (document.contains("solver")) decodeSolver(document["solver"], model.solver());
 
-    std::vector<std::string> missing;
+    DecodeReport decoded;
     decoding("this model file",
-             [&] { decodeContents(document, model, &missing); });
+             [&] { decodeContents(document, model, &decoded); });
 
     if (report) {
-        report->missingTypes = std::move(missing);
+        report->missingTypes = std::move(decoded.missingTypes);
+        report->droppedConnections = std::move(decoded.droppedConnections);
         for (const json& node : document.value("requires", json::array())) {
             LoadReport::Requirement requirement;
             requirement.library = node.value("library", std::string());

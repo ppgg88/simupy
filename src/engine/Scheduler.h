@@ -60,6 +60,9 @@ struct CompiledModel {
 
     std::vector<double> sampleTimes;
 
+    /// Not fatal, but the run is not the diagram the user drew.
+    std::vector<std::string> warnings;
+
     bool hasContinuousStates() const { return totalContinuousStates > 0; }
 
     const CompiledBlock* find(const std::string& blockId) const;
