@@ -14,13 +14,23 @@
 
 #include <cmath>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <set>
+#include <sstream>
 #include <string>
 #include <vector>
 
 using namespace simupy;
 
 namespace {
+
+std::string fileContents(const std::filesystem::path& path) {
+    std::ifstream stream(path, std::ios::binary);
+    std::ostringstream buffer;
+    buffer << stream.rdbuf();
+    return buffer.str();
+}
 
 void setEnvironment(const char* name, const char* value) {
 #ifdef _WIN32
@@ -295,6 +305,63 @@ void testMalformedLibraryIsSkippedNotFatal() {
           "and says the file is malformed rather than naming a C++ function");
 }
 
+void testFailedSaveKeepsThePreviousFile() {
+    beginTest("A save that cannot complete leaves the previous file alone");
+
+    namespace fs = std::filesystem;
+    std::error_code code;
+    const fs::path dir = fs::temp_directory_path() / "simupy-atomic-save";
+    fs::remove_all(dir, code);
+    fs::create_directories(dir, code);
+
+    const fs::path target = dir / "model.spy";
+    {
+        std::ofstream seed(target);
+        seed << "PREVIOUS";
+    }
+
+    Model model;
+    model.addBlock("Constant", 0, 0);
+
+    ModelSerializer::save(model, target.string());
+    check(!fs::exists(target.string() + ".part"),
+          "a good save leaves no temporary behind");
+    check(fs::file_size(target, code) > 8, "and the model went in");
+
+    // Root ignores the permission bit, so skip there rather than assert.
+    fs::permissions(dir, fs::perms::owner_read | fs::perms::owner_exec,
+                    fs::perm_options::replace, code);
+    bool stillWritable = false;
+    {
+        std::ofstream probe(dir / "probe");
+        stillWritable = static_cast<bool>(probe);
+    }
+    fs::remove(dir / "probe", code);
+
+    const std::string before = fileContents(target);
+
+    if (stillWritable) {
+        check(true, "skipped: the directory stayed writable, so this is root");
+    } else {
+        bool threw = false;
+        try {
+            model.addBlock("Gain", 100, 0);
+            ModelSerializer::save(model, target.string());
+        } catch (const ModelError&) {
+            threw = true;
+        }
+        check(threw, "the failure is reported rather than swallowed");
+
+        fs::permissions(dir, fs::perms::owner_all, fs::perm_options::replace,
+                        code);
+        check(fileContents(target) == before,
+              "and the file that was there is byte for byte what it was");
+    }
+
+    fs::permissions(dir, fs::perms::owner_all, fs::perm_options::replace, code);
+    fs::remove_all(dir, code);
+}
+
 void runIoTests() {
     runTest(testCopyPasteRoundTrip);
     runTest(testCopyDropsHalfWires);
@@ -303,5 +370,6 @@ void runIoTests() {
     runTest(testPasteRejectsRubbish);
     runTest(testMalformedModelReportsRatherThanEscapes);
     runTest(testMalformedLibraryIsSkippedNotFatal);
+    runTest(testFailedSaveKeepsThePreviousFile);
     runTest(testLibrarySearchPathSplitting);
 }

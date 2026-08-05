@@ -1,5 +1,6 @@
 #include "LibrarySerializer.h"
 
+#include "FileWrite.h"
 #include "JsonModel.h"
 
 #include <fstream>
@@ -199,10 +200,7 @@ void LibrarySerializer::fromJson(const std::string& text, CustomLibrary& library
 
 void LibrarySerializer::save(const CustomLibrary& library,
                              const std::string& path) {
-    std::ofstream stream(path, std::ios::out | std::ios::trunc);
-    if (!stream) throw ModelError("cannot write to '" + path + "'");
-    stream << toJson(library);
-    if (!stream) throw ModelError("failed while writing '" + path + "'");
+    writeFileAtomically(path, toJson(library));
 }
 
 void LibrarySerializer::load(CustomLibrary& library, const std::string& path) {

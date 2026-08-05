@@ -2,6 +2,7 @@
 
 #include "CustomBlock.h"
 #include "blocks/SubsystemBlock.h"
+#include "FileWrite.h"
 #include "JsonModel.h"
 
 #include <fstream>
@@ -125,10 +126,7 @@ void ModelSerializer::fromJson(const std::string& text, Model& model,
 }
 
 void ModelSerializer::save(const Model& model, const std::string& path) {
-    std::ofstream stream(path, std::ios::out | std::ios::trunc);
-    if (!stream) throw ModelError("cannot write to '" + path + "'");
-    stream << toJson(model);
-    if (!stream) throw ModelError("failed while writing '" + path + "'");
+    writeFileAtomically(path, toJson(model));
 }
 
 void ModelSerializer::load(Model& model, const std::string& path,
