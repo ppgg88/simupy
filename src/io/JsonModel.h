@@ -4,6 +4,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <exception>
 #include <set>
 #include <string>
 #include <vector>
@@ -27,6 +28,20 @@ json encodeContents(const Model& model,
 
 void decodeContents(const json& document, Model& model,
                     std::vector<std::string>* missingTypes = nullptr);
+
+/// Turns anything a malformed document throws into ModelError, the one type
+/// callers catch.
+template <typename Decode>
+void decoding(const char* subject, Decode&& decode) {
+    try {
+        decode();
+    } catch (const ModelError&) {
+        throw;
+    } catch (const std::exception& error) {
+        throw ModelError(std::string(subject) + " is malformed: " +
+                         error.what());
+    }
+}
 
 }
 }

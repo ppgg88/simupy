@@ -213,7 +213,8 @@ std::vector<std::string> LibraryManager::loadAll() {
         for (const fs::path& file : files) {
             try {
                 load(file.string());
-            } catch (const ModelError& error) {
+            } catch (const std::exception& error) {
+                // One bad file must not stop the application from starting.
                 problems.push_back(file.string() + ": " + error.what());
             }
         }

@@ -109,7 +109,8 @@ void ModelSerializer::fromJson(const std::string& text, Model& model,
     if (document.contains("solver")) decodeSolver(document["solver"], model.solver());
 
     std::vector<std::string> missing;
-    decodeContents(document, model, &missing);
+    decoding("this model file",
+             [&] { decodeContents(document, model, &missing); });
 
     if (report) {
         report->missingTypes = std::move(missing);
@@ -194,41 +195,42 @@ std::vector<std::string> ModelSerializer::pasteInto(Model& model,
     if (document.value("format", std::string()) != kSelectionFormat)
         throw ModelError("this is not a copied block selection");
 
-    // Ids are rewritten before decoding, so no wire needs patching afterwards.
-    std::map<std::string, std::string> remapped;
-    std::set<std::string> taken;
-    for (json& node : document["blocks"]) {
-        const std::string original = node.value("id", std::string());
-        const std::string fresh =
-            freeId(model, original.empty() ? "block" : original, taken);
-        remapped[original] = fresh;
-        taken.insert(fresh);
-        node["id"] = fresh;
-
-        if (dx != 0.0 || dy != 0.0) {
-            json& geometry = node["geometry"];
-            geometry["x"] = geometry.value("x", 0.0) + dx;
-            geometry["y"] = geometry.value("y", 0.0) + dy;
-        }
-    }
-
-    if (document.contains("connections")) {
-        for (json& node : document["connections"]) {
-            node["id"] = freeId(model, "wire", taken);
-            taken.insert(node["id"].get<std::string>());
-            node["source"]["block"] =
-                remapped[node["source"].value("block", std::string())];
-            node["target"]["block"] =
-                remapped[node["target"].value("block", std::string())];
-        }
-    }
-
-    decodeContents(document, model, nullptr);
-
     std::vector<std::string> created;
-    created.reserve(remapped.size());
-    for (const json& node : document["blocks"])
-        created.push_back(node.value("id", std::string()));
+    decoding("the pasted selection", [&] {
+        std::map<std::string, std::string> remapped;
+        std::set<std::string> taken;
+        for (json& node : document["blocks"]) {
+            const std::string original = node.value("id", std::string());
+            const std::string fresh =
+                freeId(model, original.empty() ? "block" : original, taken);
+            remapped[original] = fresh;
+            taken.insert(fresh);
+            node["id"] = fresh;
+
+            if (dx != 0.0 || dy != 0.0) {
+                json& geometry = node["geometry"];
+                geometry["x"] = geometry.value("x", 0.0) + dx;
+                geometry["y"] = geometry.value("y", 0.0) + dy;
+            }
+        }
+
+        if (document.contains("connections")) {
+            for (json& node : document["connections"]) {
+                node["id"] = freeId(model, "wire", taken);
+                taken.insert(node["id"].get<std::string>());
+                node["source"]["block"] =
+                    remapped[node["source"].value("block", std::string())];
+                node["target"]["block"] =
+                    remapped[node["target"].value("block", std::string())];
+            }
+        }
+
+        decodeContents(document, model, nullptr);
+
+        created.reserve(remapped.size());
+        for (const json& node : document["blocks"])
+            created.push_back(node.value("id", std::string()));
+    });
     return created;
 }
 

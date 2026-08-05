@@ -312,10 +312,10 @@ int main(int argc, char** argv) {
 
     registerBuiltinBlocks();
 
-    for (const std::string& problem : LibraryManager::instance().loadAll())
-        std::cerr << "warning: skipped block library " << problem << '\n';
-
     try {
+        for (const std::string& problem : LibraryManager::instance().loadAll())
+            std::cerr << "warning: skipped block library " << problem << '\n';
+
         if (command == "run") return runModel(args);
         if (command == "blocks") return listBlocks();
         if (command == "libraries") return listLibraries();

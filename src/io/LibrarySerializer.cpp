@@ -188,11 +188,13 @@ void LibrarySerializer::fromJson(const std::string& text, CustomLibrary& library
     library.description = document.value("description", std::string());
     library.author = document.value("author", std::string());
 
-    for (const json& node : document.value("blocks", json::array())) {
-        CustomBlockDef def = decodeBlock(node);
-        def.libraryName = library.name;
-        library.blocks.push_back(std::move(def));
-    }
+    decoding("this library file", [&] {
+        for (const json& node : document.value("blocks", json::array())) {
+            CustomBlockDef def = decodeBlock(node);
+            def.libraryName = library.name;
+            library.blocks.push_back(std::move(def));
+        }
+    });
 }
 
 void LibrarySerializer::save(const CustomLibrary& library,

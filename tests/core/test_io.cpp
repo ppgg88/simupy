@@ -226,11 +226,82 @@ void testLibrarySearchPathSplitting() {
     check(paths[1] == second, "and so is the second");
 }
 
+void testMalformedModelReportsRatherThanEscapes() {
+    beginTest("A well-formed JSON with wrong types is reported, not fatal");
+
+    // Valid JSON, wrong types: what used to escape as a non-ModelError.
+    const std::vector<std::pair<const char*, const char*>> broken = {
+        {"a non-numeric signal key",
+         R"({"format":"simupy-model","version":1,"blocks":[
+            {"id":"b1","type":"Constant","signals":{"nope":"x"}}]})"},
+        {"a name that is not a string",
+         R"({"format":"simupy-model","version":1,"blocks":[
+            {"id":"b1","type":"Constant","name":42}]})"},
+        {"a waypoint that is not a number",
+         R"({"format":"simupy-model","version":1,
+            "blocks":[{"id":"b1","type":"Constant"},
+                      {"id":"b2","type":"Scope"}],
+            "connections":[{"source":{"block":"b1","port":0},
+                            "target":{"block":"b2","port":0},
+                            "waypoints":[["x","y"]]}]})"},
+        {"blocks that are not an array",
+         R"({"format":"simupy-model","version":1,"blocks":7})"},
+    };
+
+    for (const auto& [what, text] : broken) {
+        Model model;
+        bool threwModelError = false;
+        try {
+            ModelSerializer::fromJson(text, model);
+        } catch (const ModelError&) {
+            threwModelError = true;
+        } catch (const std::exception&) {
+        }
+        check(threwModelError,
+              std::string("a model with ") + what + " raises a ModelError");
+    }
+
+    Model fine;
+    bool threw = false;
+    try {
+        ModelSerializer::fromJson(
+            R"({"format":"simupy-model","version":1,"blocks":[]})", fine);
+    } catch (const std::exception&) {
+        threw = true;
+    }
+    check(!threw, "an empty but valid model still loads");
+}
+
+void testMalformedLibraryIsSkippedNotFatal() {
+    beginTest("A malformed library file is refused as an error, not a crash");
+
+    const char* text =
+        R"({"format":"simupy-library","version":1,"name":"Broken","blocks":[
+            {"name":"Bad","kind":"subsystem","contents":{"blocks":[
+                {"id":"b1","type":"Constant","signals":{"nope":"x"}}]}}]})";
+
+    std::string message;
+    bool threwModelError = false;
+    try {
+        CustomLibrary library;
+        LibrarySerializer::fromJson(text, library);
+    } catch (const ModelError& error) {
+        threwModelError = true;
+        message = error.what();
+    } catch (const std::exception&) {
+    }
+    check(threwModelError, "the library error arrives as a ModelError");
+    check(message.find("malformed") != std::string::npos,
+          "and says the file is malformed rather than naming a C++ function");
+}
+
 void runIoTests() {
     runTest(testCopyPasteRoundTrip);
     runTest(testCopyDropsHalfWires);
     runTest(testCopySubsystemTakesContents);
     runTest(testPasteTwice);
     runTest(testPasteRejectsRubbish);
+    runTest(testMalformedModelReportsRatherThanEscapes);
+    runTest(testMalformedLibraryIsSkippedNotFatal);
     runTest(testLibrarySearchPathSplitting);
 }
