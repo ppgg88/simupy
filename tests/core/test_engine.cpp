@@ -655,6 +655,55 @@ void testStiffSolverKeepsItsJacobianAcrossSamples() {
     checkClose(runToEnd(model), expected, 1e-6, "and the answer is still right");
 }
 
+void testThinnedSnapshotKeepsTheShape() {
+    beginTest("A thinned snapshot keeps both ends and the values it picks");
+
+    SignalLog log;
+    LogChannel channel;
+    channel.blockName = "probe";
+    channel.portName = "in";
+    channel.width = 2;
+    log.configure({channel}, 1000000);
+
+    Vec value(2);
+    const std::vector<const Vec*> sources{&value};
+    constexpr int kSamples = 5000;
+    for (int i = 0; i < kSamples; ++i) {
+        value[0] = i;
+        value[1] = -i;
+        log.append(i * 0.001, sources);
+    }
+    check(log.sampleCount() == kSamples, "the log kept every sample");
+
+    const SignalLog thin = log.sampled(500);
+    check(thin.sampleCount() <= 500, "the snapshot honours its cap");
+    check(thin.sampleCount() > 1, "and is not empty");
+    if (thin.sampleCount() < 2) return;
+
+    checkClose(thin.times().front(), log.times().front(), 1e-12,
+               "it starts where the run started");
+    checkClose(thin.times().back(), log.times().back(), 1e-12,
+               "and ends where the run has got to");
+
+    bool ordered = true;
+    for (int i = 1; i < thin.sampleCount(); ++i)
+        if (thin.times()[i] <= thin.times()[i - 1]) ordered = false;
+    check(ordered, "time still increases strictly");
+
+    const LogChannel& kept = thin.channels().front();
+    check(kept.width == 2, "the channel is still two wide");
+    bool faithful = true;
+    for (int i = 0; i < thin.sampleCount(); ++i) {
+        const double index = kept.at(i, 0);
+        if (std::abs(thin.times()[i] - index * 0.001) > 1e-12) faithful = false;
+        if (std::abs(kept.at(i, 1) + index) > 1e-12) faithful = false;
+    }
+    check(faithful, "and each row is a sample as it was logged, not a blend");
+
+    check(log.sampled(kSamples * 2).sampleCount() == kSamples,
+          "a log below the cap is returned untouched");
+}
+
 void testSolverOrders() {
     beginTest("Fixed-step solvers reach their expected accuracy");
 
@@ -1199,6 +1248,7 @@ void runEngineTests() {
     runTest(testStepDiagnosticsAreReported);
     runTest(testWidthPropagatesAgainstBlockOrder);
     runTest(testStiffSolverKeepsItsJacobianAcrossSamples);
+    runTest(testThinnedSnapshotKeepsTheShape);
     runTest(testSolverOrders);
     runTest(testStiffSolver);
     runTest(testSerializationRoundTrip);

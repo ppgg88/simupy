@@ -43,6 +43,9 @@ public:
 
     void append(double t, const std::vector<const Vec*>& values);
 
+    /// At most `maxSamples` evenly spaced samples, first and last included.
+    SignalLog sampled(int maxSamples) const;
+
     int sampleCount() const { return static_cast<int>(times_.size()); }
     const std::vector<double>& times() const { return times_; }
     const std::vector<LogChannel>& channels() const { return channels_; }

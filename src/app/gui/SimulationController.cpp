@@ -12,6 +12,8 @@ namespace {
 constexpr qint64 kSnapshotIntervalMs = 120;
 constexpr qint64 kRealTimeSnapshotIntervalMs = 40;
 
+constexpr int kLiveSnapshotSamples = 4000;
+
 }
 
 SimulationController::SimulationController(QObject* parent) : QThread(parent) {
@@ -92,7 +94,9 @@ void SimulationController::run() {
             if (now - lastSnapshot >= snapshotInterval) {
                 lastSnapshot = now;
                 emit progressed(simulator.time(), simulator.progress());
-                emit dataUpdated(std::make_shared<SignalLog>(simulator.log()));
+                // Thinned; the whole log goes out once, below, at the end.
+                emit dataUpdated(std::make_shared<SignalLog>(
+                    simulator.log().sampled(kLiveSnapshotSamples)));
             }
         }
 

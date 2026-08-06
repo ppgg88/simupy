@@ -33,6 +33,51 @@ void SignalLog::append(double t, const std::vector<const Vec*>& values) {
     if (static_cast<int>(times_.size()) >= maxSamples_) decimate();
 }
 
+SignalLog SignalLog::sampled(int maxSamples) const {
+    const std::size_t total = times_.size();
+    if (maxSamples < 2 || total <= static_cast<std::size_t>(maxSamples))
+        return *this;
+
+    const std::size_t want = static_cast<std::size_t>(maxSamples);
+
+    SignalLog out;
+    out.maxSamples_ = maxSamples_;
+    out.decimation_ = decimation_;
+    out.pending_ = pending_;
+    // Metadata only: assigning the channels would copy every sample first.
+    out.channels_.reserve(channels_.size());
+    for (const LogChannel& from : channels_) {
+        LogChannel to;
+        to.blockPath = from.blockPath;
+        to.blockName = from.blockName;
+        to.portName = from.portName;
+        to.signalName = from.signalName;
+        to.port = from.port;
+        to.width = from.width;
+        to.data.reserve(want * static_cast<std::size_t>(from.width));
+        out.channels_.push_back(std::move(to));
+    }
+    out.times_.reserve(want);
+
+    // Evenly spaced, ends included, strictly increasing.
+    std::size_t previous = total;
+    for (std::size_t i = 0; i < want; ++i) {
+        const std::size_t pick = i * (total - 1) / (want - 1);
+        if (previous != total && pick <= previous) continue;
+        previous = pick;
+
+        out.times_.push_back(times_[pick]);
+        for (std::size_t c = 0; c < channels_.size(); ++c) {
+            const LogChannel& from = channels_[c];
+            const std::size_t width = static_cast<std::size_t>(from.width);
+            LogChannel& to = out.channels_[c];
+            for (std::size_t k = 0; k < width; ++k)
+                to.data.push_back(from.data[pick * width + k]);
+        }
+    }
+    return out;
+}
+
 void SignalLog::decimate() {
     const std::size_t total = times_.size();
     const std::size_t kept = (total + 1) / 2;
