@@ -134,8 +134,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      # CMake is told the version directly; the files stamp_version.py patches
-      # are Flatpak and AppStream, which this job does not build.
+      # SIMUPY_VERSION goes to CMake directly, overriding the cache variable.
       - name: Version
         shell: pwsh
         run: |
