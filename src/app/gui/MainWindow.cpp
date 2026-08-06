@@ -212,6 +212,13 @@ MainWindow::~MainWindow() {
     // model_ dies here; controller_ only in ~QObject. Stop the run first.
     controller_->requestStop();
     controller_->wait();
+
+    // ~QWidget deletes our children before ~QObject severs their connections,
+    // so a child tearing itself down would still reach our slots.
+    scene_->disconnect(this);
+    view_->disconnect(this);
+    controller_->disconnect(this);
+
     PythonEngine::instance().setOutputHandler({});
 }
 
