@@ -704,6 +704,44 @@ void testThinnedSnapshotKeepsTheShape() {
           "a log below the cap is returned untouched");
 }
 
+void testCoincidingRatesUpdateSimultaneously() {
+    beginTest("Discrete rates that coincide update from the same old state");
+
+    // Two delays at 1 ms and 3 ms: every third sample both fire at once.
+    // updateDiscrete reads the pre-update xd, so the order cannot matter.
+    const auto finalValue = [](bool fastFirst) {
+        Model model;
+        Block* ramp = model.addBlock("Ramp", 0, 0);
+
+        // Creation order decides the loop order.
+        Block* fast = nullptr;
+        Block* slow = nullptr;
+        if (fastFirst) {
+            fast = model.addBlock("UnitDelay", 200, 0);
+            slow = model.addBlock("UnitDelay", 400, 0);
+        } else {
+            slow = model.addBlock("UnitDelay", 400, 0);
+            fast = model.addBlock("UnitDelay", 200, 0);
+        }
+        fast->params().set("sampleTime", 0.001);
+        slow->params().set("sampleTime", 0.003);
+
+        Block* scope = model.addBlock("Scope", 600, 0);
+        model.connect(ramp->id(), 0, fast->id(), 0);
+        model.connect(fast->id(), 0, slow->id(), 0);
+        model.connect(slow->id(), 0, scope->id(), 0);
+
+        model.solver().stopTime = 0.05;
+        return runToEnd(model);
+    };
+
+    const double a = finalValue(true);
+    const double b = finalValue(false);
+    checkClose(a, b, 1e-12,
+               "the answer does not depend on which rate is visited first");
+    check(a != 0.0, "and the chain actually carried a value");
+}
+
 void testSolverOrders() {
     beginTest("Fixed-step solvers reach their expected accuracy");
 
@@ -1249,6 +1287,7 @@ void runEngineTests() {
     runTest(testWidthPropagatesAgainstBlockOrder);
     runTest(testStiffSolverKeepsItsJacobianAcrossSamples);
     runTest(testThinnedSnapshotKeepsTheShape);
+    runTest(testCoincidingRatesUpdateSimultaneously);
     runTest(testSolverOrders);
     runTest(testStiffSolver);
     runTest(testSerializationRoundTrip);
