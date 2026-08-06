@@ -37,6 +37,7 @@ qt_add_library(simupy-gui STATIC
     dialogs/LibraryManagerDialog.cpp
     dialogs/SolverSettingsDialog.cpp
     dialogs/ScopeWindow.cpp
+    dialogs/PackageRequirementsDialog.cpp
     dialogs/PythonEditor.cpp
     dialogs/PythonHighlighter.cpp
 )

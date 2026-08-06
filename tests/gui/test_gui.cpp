@@ -11,6 +11,7 @@
 #include "app/gui/canvas/DiagramView.h"
 #include "app/gui/MainWindow.h"
 #include "app/gui/canvas/QuickAddPopup.h"
+#include "app/gui/dialogs/PackageRequirementsDialog.h"
 #include "app/gui/dialogs/BlockInspector.h"
 #include "app/gui/NumberInput.h"
 #include "app/gui/panels/PropertyPanel.h"
@@ -20,6 +21,7 @@
 #include "io/ModelSerializer.h"
 #include "scripting/PythonEngine.h"
 
+#include <map>
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
@@ -556,6 +558,66 @@ void testUndoRedo() {
     window.scene()->addBlock(QStringLiteral("Gain"), QPointF(600, 0));
     QApplication::processEvents();
     check(!redo->isEnabled(), "a new edit throws the undone branch away");
+}
+
+void testDeclaringPythonPackages() {
+    beginTest("A library's Python packages can be declared and read off");
+
+    CustomLibrary library;
+    library.name = "Widget Toolbox";
+    CustomBlockDef def;
+    def.name = "WidgetDriver";
+    def.kind = CustomBlockKind::Python;
+    def.code = R"(
+import scipy.signal
+from simupy import Block, require
+
+class Driver(Block):
+    def setup(self, widths):
+        self.port = require("serial", "pyserial", "talking to the widget")
+)";
+    library.blocks.push_back(def);
+    library.requires_ = {{"numpy", "", "arrays"}};
+
+    PackageRequirementsDialog dialog(library);
+    dialog.show();
+    QApplication::processEvents();
+
+    check(dialog.requirements().size() == 1,
+          "the library's existing declaration is loaded");
+
+    QPushButton* detect = nullptr;
+    for (QPushButton* button : dialog.findChildren<QPushButton*>())
+        if (button->text().contains(QStringLiteral("Detect"))) detect = button;
+    check(detect != nullptr, "there is a button to read the sources");
+    if (!detect) return;
+
+    detect->click();
+    QApplication::processEvents();
+
+    const std::vector<PackageRequirement> found = dialog.requirements();
+    std::map<std::string, PackageRequirement> byModule;
+    for (const PackageRequirement& need : found) byModule[need.module] = need;
+
+    check(byModule.count("numpy") == 1, "what was declared is still there");
+    check(byModule.count("scipy") == 1, "an import is picked up");
+    check(byModule.count("serial") == 1, "and one reached through require()");
+    if (byModule.count("serial")) {
+        check(byModule["serial"].package == "pyserial",
+              "with the pip name, which differs from the module");
+        check(byModule["serial"].purpose == "talking to the widget",
+              "and the reason it is needed");
+    }
+    if (byModule.count("numpy"))
+        check(byModule["numpy"].purpose == "arrays",
+              "and detection does not overwrite what the author wrote");
+
+    // Detecting twice must not duplicate what is already listed.
+    const std::size_t before = dialog.requirements().size();
+    detect->click();
+    QApplication::processEvents();
+    check(dialog.requirements().size() == before,
+          "reading the sources again adds nothing twice");
 }
 
 void testUndoRedoSitOnTheToolbar() {
@@ -2033,6 +2095,7 @@ int main(int argc, char** argv) {
     testSimulationControllerReportsBothOutcomes();
     testDeletingSeveralBlocksDoesNotCrash();
     testUndoRedo();
+    testDeclaringPythonPackages();
     testUndoRedoSitOnTheToolbar();
     testUndoRestoresDeletionAndGrouping();
     testOpeningSaysWhenAModelCarriesPython(modelPath);

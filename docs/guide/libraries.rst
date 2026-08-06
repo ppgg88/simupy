@@ -98,10 +98,14 @@ A library whose blocks ``import scipy`` is not self-contained the way one made
 of subsystems is: the file carries the code, not the package it needs. So a
 library can say what it needs, and SimuPy can fetch it.
 
-Declare them, and :menuselection:`Library --> Manage Libraries` shows each one
-against the interpreter actually running — installed and at what version, or
-missing and under what pip name. :guilabel:`Install packages` lights up when
-something is missing.
+Everything is in :menuselection:`Library --> Manage Libraries`. Select a
+library — the library, not one of its blocks — and the panel below lists its
+packages against the interpreter actually running: installed and at what
+version, or missing and under what pip name.
+
+:guilabel:`Python packages…` opens the list to edit, with
+:guilabel:`Detect from blocks` to read it off the sources.
+:guilabel:`Install packages` lights up when something is missing.
 
 Where they go
 -------------
@@ -128,7 +132,8 @@ it is for::
 
     serial   → pyserial   talking to an Arduino
 
-The block editor reads your source and offers what it finds — ``import x``,
+:guilabel:`Detect from blocks` reads the library's sources and adds what it
+finds — ``import x``,
 ``from x import y``, and the module named in ``require("x", "pkg")``, which is
 also where the pip name and the reason come from. It skips the standard library
 and what SimuPy already ships. Treat it as a prompt, not the record: a static

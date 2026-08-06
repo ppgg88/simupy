@@ -17,6 +17,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
+#include "PackageRequirementsDialog.h"
 #include "scripting/PythonPackages.h"
 #include "scripting/PythonEngine.h"
 #include <QApplication>
@@ -63,6 +64,9 @@ LibraryManagerDialog::LibraryManagerDialog(QWidget* parent) : QDialog(parent) {
         tr("Write a copy of the library out, to send to someone else."));
     editButton_ = new QPushButton(tr("Edit block…"));
     removeButton_ = new QPushButton(tr("Remove"));
+    declareButton_ = new QPushButton(tr("Python packages…"));
+    declareButton_->setToolTip(
+        tr("Declare what this library imports, or read it off the sources."));
     packagesButton_ = new QPushButton(tr("Install packages"));
     packagesButton_->setToolTip(
         tr("Fetch the Python packages this library needs into SimuPy's own "
@@ -76,6 +80,7 @@ LibraryManagerDialog::LibraryManagerDialog(QWidget* parent) : QDialog(parent) {
     actions->addWidget(exportButton_);
     actions->addWidget(removeButton_);
     actions->addSpacing(12);
+    actions->addWidget(declareButton_);
     actions->addWidget(packagesButton_);
     actions->addStretch(1);
     actions->addWidget(folderButton);
@@ -106,6 +111,8 @@ LibraryManagerDialog::LibraryManagerDialog(QWidget* parent) : QDialog(parent) {
             &LibraryManagerDialog::onSelectionChanged);
     connect(tree_, &QTreeWidget::itemDoubleClicked, this,
             [this](QTreeWidgetItem*, int) { editSelected(); });
+    connect(declareButton_, &QPushButton::clicked, this,
+            &LibraryManagerDialog::editPackages);
     connect(packagesButton_, &QPushButton::clicked, this,
             &LibraryManagerDialog::installPackages);
     connect(folderButton, &QPushButton::clicked, this, [this] {
@@ -195,6 +202,26 @@ QString LibraryManagerDialog::packageReport(const CustomLibrary& library) const 
     return tr("<br><br>Python packages:<br>") + rows.join(QStringLiteral("<br>"));
 }
 
+void LibraryManagerDialog::editPackages() {
+    CustomLibrary* library =
+        LibraryManager::instance().library(selectedLibrary().toStdString());
+    if (!library) return;
+
+    PackageRequirementsDialog dialog(*library, this);
+    if (dialog.exec() != QDialog::Accepted) return;
+
+    library->requires_ = dialog.requirements();
+    try {
+        LibraryManager::instance().save(*library);
+    } catch (const ModelError& error) {
+        QMessageBox::warning(this, tr("Python packages"),
+                             QString::fromStdString(error.what()));
+        return;
+    }
+    onSelectionChanged();
+    emit librariesChanged();
+}
+
 void LibraryManagerDialog::installPackages() {
     const QString libraryName = selectedLibrary();
     CustomLibrary* library =
@@ -251,6 +278,7 @@ void LibraryManagerDialog::onSelectionChanged() {
                                                : tr("Remove block"));
 
     packagesButton_->setEnabled(false);
+    declareButton_->setEnabled(!libraryName.isEmpty());
 
     CustomLibrary* library =
         LibraryManager::instance().library(libraryName.toStdString());

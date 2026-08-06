@@ -30,6 +30,7 @@ private slots:
     void editSelected();
     void onSelectionChanged();
     void installPackages();
+    void editPackages();
 
 private:
     void reload();
@@ -44,6 +45,7 @@ private:
     QPushButton* removeButton_ = nullptr;
     QPushButton* editButton_ = nullptr;
     QPushButton* packagesButton_ = nullptr;
+    QPushButton* declareButton_ = nullptr;
 };
 
 }
