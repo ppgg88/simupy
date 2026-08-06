@@ -56,6 +56,12 @@ public:
     std::string install(const std::string& spec,
                         const std::function<void(const std::string&)>& onOutput);
 
+    /// Why an install of `spec` most likely failed, in one sentence, or empty
+    /// when nothing useful can be said. Asks PyPI which interpreters the
+    /// package ships wheels for: no wheel means pip fell back to building from
+    /// source, which is where nearly every failure comes from.
+    std::string explainFailure(const std::string& spec) const;
+
 private:
     PythonPackages() = default;
 

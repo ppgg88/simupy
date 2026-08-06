@@ -485,6 +485,24 @@ class Filter(Block):
           "and loading it clears what was there before");
 }
 
+void testFailureExplanationStaysQuietWhenItCannotHelp() {
+    beginTest("A failed install explains itself, or says nothing");
+
+    PythonPackages& packages = PythonPackages::instance();
+
+    // A package with wheels for everything has nothing to explain, and neither
+    // does one that does not exist. Guessing in either case would be noise.
+    check(packages.explainFailure("humanize").empty(),
+          "a package with a matching wheel draws no comment");
+    check(packages.explainFailure("definitely-not-a-real-package-xyz").empty(),
+          "nor does one PyPI has never heard of");
+    check(packages.explainFailure("").empty(), "nor does an empty spec");
+
+    // The version specifier must not be taken for part of the name.
+    check(packages.explainFailure("humanize>=4.0").empty(),
+          "a version specifier is stripped before asking PyPI");
+}
+
 void testPackageStatusAndDirectory() {
     beginTest("Package status reads the interpreter SimuPy actually uses");
 
@@ -509,6 +527,7 @@ void runScriptingTests() {
     runTest(testDetectedRequirements);
     runTest(testLibraryRequirementsRoundTrip);
     runTest(testModelRequirementsRoundTrip);
+    runTest(testFailureExplanationStaysQuietWhenItCannotHelp);
     runTest(testPackageStatusAndDirectory);
     runTest(testCustomBlockMask);
     runTest(testCustomBlockInstancesAreIndependent);

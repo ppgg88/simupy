@@ -152,6 +152,19 @@ read cannot see an import assembled at runtime.
    tried to import it yet. Restart after installing if a block still cannot
    find it.
 
+When an install fails
+---------------------
+
+Almost always because the package ships no wheel for the Python SimuPy is
+running, so pip falls back to building it from source — which needs a compiler
+and whatever the build script itself imports. SimuPy asks PyPI which
+interpreters the package does publish wheels for and says so, rather than
+leaving you with pip's traceback.
+
+A package whose newest wheels are years old has usually stopped supporting
+current Python, and no flag will change that. Look for a maintained fork, or
+pin SimuPy to an interpreter the package still supports.
+
 Icons
 =====
 

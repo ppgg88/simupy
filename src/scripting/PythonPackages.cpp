@@ -192,6 +192,58 @@ os.replace(temporary, target)
     return {};
 }
 
+std::string PythonPackages::explainFailure(const std::string& spec) const {
+    if (spec.empty() || !PythonEngine::instance().isReady()) return {};
+
+    ScopedGil gil;
+    try {
+        py::dict scope;
+        scope["spec"] = spec;
+        py::exec(R"(
+import json, re, sys, urllib.request
+
+verdict = ""
+name = re.split(r"[<>=!~\[; ]", spec.strip(), 1)[0]
+here = f"cp{sys.version_info.major}{sys.version_info.minor}"
+
+try:
+    with urllib.request.urlopen(
+            f"https://pypi.org/pypi/{name}/json", timeout=20) as response:
+        data = json.load(response)
+except Exception:
+    data = None
+
+if data is None:
+    verdict = ""
+elif not any(f["packagetype"] == "bdist_wheel" for f in data.get("urls", [])):
+    verdict = (f"{name} publishes no prebuilt wheel at all, so pip has to "
+               f"build it from source — which needs a compiler and whatever "
+               f"else its build script imports.")
+else:
+    tags = set()
+    for f in data["urls"]:
+        if f["packagetype"] != "bdist_wheel":
+            continue
+        for part in f["filename"].split("-"):
+            if re.fullmatch(r"(cp|pp)\d{2,3}", part) or part == "py3":
+                tags.add(part)
+    if "py3" in tags or here in tags:
+        verdict = ""
+    else:
+        known = ", ".join(sorted(t for t in tags if t.startswith("cp"))) or "none"
+        verdict = (f"{name} ships no wheel for this interpreter "
+                   f"(Python {sys.version_info.major}.{sys.version_info.minor}); "
+                   f"its wheels are for {known}. pip therefore fell back to "
+                   f"building from source, which is what failed.")
+)",
+                 scope);
+        return scope["verdict"].cast<std::string>();
+    } catch (const py::error_already_set&) {
+        PyErr_Clear();
+        return {};
+    }
+}
+
 std::string PythonPackages::install(
     const std::string& spec,
     const std::function<void(const std::string&)>& onOutput) {
@@ -219,6 +271,7 @@ import contextlib, io, runpy, sys
 
 argv = sys.argv
 sys.argv = ["pip", "install", "--target", target, "--upgrade",
+            "--prefer-binary",
             "--no-input", "--disable-pip-version-check", spec]
 buffer = io.StringIO()
 status = 0
@@ -241,8 +294,12 @@ output = buffer.getvalue()
         if (onOutput && !output.empty()) onOutput(output);
 
         const int status = scope["status"].cast<int>();
-        if (status != 0)
-            return "pip could not install '" + spec + "'";
+        if (status != 0) {
+            std::string reason = "pip could not install '" + spec + "'";
+            const std::string why = explainFailure(spec);
+            if (!why.empty()) reason += ".\n\n" + why;
+            return reason;
+        }
     } catch (const py::error_already_set& error) {
         return "the installer failed: " + describe(error);
     }
