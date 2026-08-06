@@ -261,13 +261,13 @@ void MainWindow::buildActions() {
     newAction_->setToolTip(tr("New model (Ctrl+N)"));
     connect(newAction_, &QAction::triggered, this, &MainWindow::newModel);
 
-    undoAction_ = new QAction(tr("&Undo"), this);
+    undoAction_ = new QAction(appicons::undo(), tr("&Undo"), this);
     undoAction_->setShortcut(QKeySequence::Undo);
     undoAction_->setStatusTip(tr("Take back the last change to the diagram"));
     undoAction_->setEnabled(false);
     connect(undoAction_, &QAction::triggered, this, &MainWindow::undo);
 
-    redoAction_ = new QAction(tr("&Redo"), this);
+    redoAction_ = new QAction(appicons::redo(), tr("&Redo"), this);
     redoAction_->setShortcuts(QKeySequence::keyBindings(QKeySequence::Redo));
     redoAction_->setStatusTip(tr("Put back the change that was taken away"));
     redoAction_->setEnabled(false);
@@ -539,6 +539,10 @@ void MainWindow::buildToolBar() {
     bar->addAction(newAction_);
     bar->addAction(openAction_);
     bar->addAction(saveAction_);
+    bar->addSeparator();
+
+    bar->addAction(undoAction_);
+    bar->addAction(redoAction_);
     bar->addSeparator();
 
     for (QAction* action : {runAction_, stopAction_}) {

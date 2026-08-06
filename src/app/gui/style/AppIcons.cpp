@@ -227,6 +227,44 @@ QIcon save() {
         ink());
 }
 
+namespace {
+
+/// The conventional curved arrow, drawn once and mirrored for redo.
+void curvedArrow(QPainter& p, const QColor& c, bool leftward) {
+    p.save();
+    if (!leftward) {
+        p.translate(kGrid, 0);
+        p.scale(-1, 1);
+    }
+
+    // A shaft pointing left, hooking down to the right: asymmetric, so it does
+    // not read as a horseshoe the way a plain half-circle does.
+    const QPointF tip(3.5, 8.5);
+
+    QPainterPath hook;
+    hook.moveTo(tip);
+    hook.lineTo(11, 8.5);
+    hook.arcTo(QRectF(4, 8.5, 14, 14), 90, -90);
+    stroke(p, c, hook, 2.0);
+
+    stroke(p, c, polyline({{8, 4}, tip, {8, 13}}), 2.0);
+    p.restore();
+}
+
+}
+
+QIcon undo() {
+    return cached(
+        QStringLiteral("undo"),
+        [](QPainter& p, const QColor& c) { curvedArrow(p, c, true); }, ink());
+}
+
+QIcon redo() {
+    return cached(
+        QStringLiteral("redo"),
+        [](QPainter& p, const QColor& c) { curvedArrow(p, c, false); }, ink());
+}
+
 QIcon copy() {
     return cached(
         QStringLiteral("copy"),

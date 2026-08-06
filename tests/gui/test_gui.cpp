@@ -45,6 +45,7 @@
 #include <QListWidget>
 #include <QSlider>
 #include <QTemporaryDir>
+#include <QToolBar>
 #include <QTest>
 #include <QThread>
 
@@ -557,6 +558,43 @@ void testUndoRedo() {
     check(!redo->isEnabled(), "a new edit throws the undone branch away");
 }
 
+void testUndoRedoSitOnTheToolbar() {
+    beginTest("Undo and redo have buttons, not just a shortcut");
+
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    QApplication::processEvents();
+
+    QToolBar* bar = window.findChild<QToolBar*>(QStringLiteral("mainToolBar"));
+    check(bar != nullptr, "the main toolbar is there");
+    if (!bar) return;
+
+    QAction* undo = nullptr;
+    QAction* redo = nullptr;
+    for (QAction* action : bar->actions()) {
+        if (action->text() == QStringLiteral("&Undo")) undo = action;
+        if (action->text() == QStringLiteral("&Redo")) redo = action;
+    }
+    check(undo != nullptr, "undo is on the toolbar");
+    check(redo != nullptr, "redo is on the toolbar");
+    if (!undo || !redo) return;
+
+    check(!undo->icon().isNull(), "and carries an icon");
+    check(!redo->icon().isNull(), "as does redo");
+    check(!undo->isEnabled() && !redo->isEnabled(),
+          "both start greyed out on an untouched model");
+
+    window.scene()->addBlock(QStringLiteral("Constant"), QPointF(0, 0));
+    QApplication::processEvents();
+    check(undo->isEnabled(), "an edit lights undo up");
+    check(!redo->isEnabled(), "with redo still dark");
+
+    undo->trigger();
+    QApplication::processEvents();
+    check(redo->isEnabled(), "and undoing lights redo");
+}
+
 void testUndoRestoresDeletionAndGrouping() {
     beginTest("Undo brings back a deleted selection, and ungroups a grouping");
 
@@ -944,6 +982,8 @@ void testToolbarIconsDrawSomething() {
         {"new", appicons::newModel()},
         {"open", appicons::open()},
         {"save", appicons::save()},
+        {"undo", appicons::undo()},
+        {"redo", appicons::redo()},
         {"copy", appicons::copy()},
         {"cut", appicons::cut()},
         {"paste", appicons::paste()},
@@ -1993,6 +2033,7 @@ int main(int argc, char** argv) {
     testSimulationControllerReportsBothOutcomes();
     testDeletingSeveralBlocksDoesNotCrash();
     testUndoRedo();
+    testUndoRedoSitOnTheToolbar();
     testUndoRestoresDeletionAndGrouping();
     testOpeningSaysWhenAModelCarriesPython(modelPath);
     testTrustingAModelSilencesTheNotice();

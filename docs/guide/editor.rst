@@ -51,12 +51,14 @@ Selection and the clipboard
    * - :kbd:`Ctrl+A`
      - Selects everything on the current diagram.
    * - :kbd:`Ctrl+Z`, :kbd:`Ctrl+Shift+Z`
-     - Undo and redo, a hundred steps deep. Everything that changes the model
-       is covered: deleting, grouping, pasting, a parameter typed into the
-       Properties dock, the solver settings. Each step restores the model
-       whole, so it returns you to the top of the diagram and then back down
-       into whichever subsystem you had open. Neither is offered while a run is
-       in flight, and a run's results are not part of the history.
+     - Undo and redo, a hundred steps deep, also on the toolbar as the two
+       curved arrows — greyed out when there is nothing to go back or forward
+       to. Everything that changes the model is covered: deleting, grouping,
+       pasting, a parameter typed into the Properties dock, the solver
+       settings. Each step restores the model whole, so it returns you to the
+       top of the diagram and then back down into whichever subsystem you had
+       open. Neither is offered while a run is in flight, and a run's results
+       are not part of the history.
    * - :kbd:`F2`
      - Names the signal the selected wire carries.
    * - :kbd:`Ctrl+G`

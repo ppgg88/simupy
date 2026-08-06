@@ -14,6 +14,9 @@ QIcon newModel();
 QIcon open();
 QIcon save();
 
+QIcon undo();
+QIcon redo();
+
 QIcon copy();
 QIcon cut();
 QIcon paste();
