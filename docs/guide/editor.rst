@@ -116,6 +116,12 @@ allowed to finish its tick first, and a write that fails is reported in the
 Console instead of a dialog every half minute — the edits stay in memory and
 the ``*`` stays up. The setting is remembered between sessions.
 
+Opening a model that carries Python — a block source, an init script, a mask
+expression — says so once in the Console, because a |spy| reads as a data file
+and is not one. :menuselection:`File --> Trust this model` remembers that you
+have read it and stops the notice for that file, until its code changes. See
+:doc:`../limitations` for what runs when.
+
 Running
 =======
 

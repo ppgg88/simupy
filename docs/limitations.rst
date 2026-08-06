@@ -106,6 +106,16 @@ Running a model executes everything in it
    code: a field meant to hold ``2*pi/T`` will just as happily hold
    ``__import__('os').system(...)``.
 
+Trusting a model is per file, and per its code
+   Opening a model that carries Python says so once, in the console.
+   :menuselection:`File --> Trust this model` remembers your answer and stops
+   the notice for that file. Trust is bound to the code itself, not to the
+   path: moving blocks about or retuning a gain keeps it, and changing a block
+   source, a parameters script, an init script or a mask expression asks again
+   — including when the change arrives from outside while the file sits where
+   it always did. Saving carries trust across your own edits, but never grants
+   it: a file you have not trusted stays untrusted however often you save it.
+
 Opening a model does not run anything
    Loading a |spy| deserializes it and no more. What it does do is add the
    file's own directory to :py:data:`sys.path`, for the rest of the session

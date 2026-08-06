@@ -122,6 +122,10 @@ private:
     void rebuildBreadcrumb();
     bool insideSubsystem() const { return path_.size() > 1; }
 
+    bool modelIsTrusted() const;
+    void setModelTrusted(bool trusted);
+    void updateTrustAction();
+
     void undo();
     void redo();
     void seedHistory();
@@ -174,6 +178,7 @@ private:
     QAction* openAction_ = nullptr;
     QAction* undoAction_ = nullptr;
     QAction* redoAction_ = nullptr;
+    QAction* trustAction_ = nullptr;
     QLineEdit* stopTimeField_ = nullptr;
     QLabel* statusLabel_ = nullptr;
     QLabel* timeLabel_ = nullptr;

@@ -29,6 +29,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QCloseEvent>
+#include <QCryptographicHash>
 #include <QDockWidget>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -39,6 +40,7 @@
 #include <QProgressBar>
 #include <QRegularExpression>
 #include <QScreen>
+#include <QSignalBlocker>
 #include <QSettings>
 #include <QStatusBar>
 #include <QTextBrowser>
@@ -63,7 +65,9 @@ struct ExecutableContent {
 
 void collectExecutable(const Model& model, ExecutableContent& found) {
     for (const BlockPtr& block : model.blocks()) {
-        if (!block->params().textOr("code", {}).empty()) ++found.scripts;
+        if (!block->params().textOr("code", {}).empty() ||
+            !block->params().textOr("parameters", {}).empty())
+            ++found.scripts;
         found.expressions +=
             static_cast<int>(block->paramExpressions().size());
         if (const auto* subsystem =
@@ -72,8 +76,44 @@ void collectExecutable(const Model& model, ExecutableContent& found) {
     }
 }
 
+void gatherExecutable(const Model& model, QStringList& out) {
+    for (const BlockPtr& block : model.blocks()) {
+        for (const char* key : {"code", "parameters"}) {
+            const std::string text = block->params().textOr(key, {});
+            if (!text.empty())
+                out << QLatin1String(key) + QLatin1Char(':') +
+                           QString::fromStdString(text);
+        }
+        for (const auto& [name, expression] : block->paramExpressions())
+            out << QString::fromStdString(name + "=" + expression);
+        if (const auto* subsystem =
+                dynamic_cast<const SubsystemBlock*>(block.get()))
+            gatherExecutable(subsystem->contents(), out);
+    }
+}
+
+/// The code a model would run, and nothing else, so trust survives a moved
+/// block but not an edited script. Empty when it would run nothing.
+QString executableFingerprint(const Model& model) {
+    QStringList pieces;
+    if (!model.initScript().empty())
+        pieces << QStringLiteral("init:") +
+                      QString::fromStdString(model.initScript());
+    gatherExecutable(model, pieces);
+    if (pieces.isEmpty()) return {};
+
+    pieces.sort();
+    QCryptographicHash digest(QCryptographicHash::Sha256);
+    for (const QString& piece : pieces) {
+        digest.addData(piece.toUtf8());
+        digest.addData(QByteArrayLiteral("\0"));
+    }
+    return QString::fromLatin1(digest.result().toHex());
+}
+
 constexpr int kAutosaveIntervalMs = 30000;
 constexpr const char* kAutosaveSetting = "editor/autosave";
+constexpr const char* kTrustedSetting = "security/trustedModels";
 
 }
 
@@ -226,6 +266,15 @@ void MainWindow::buildActions() {
     redoAction_->setEnabled(false);
     connect(redoAction_, &QAction::triggered, this, &MainWindow::redo);
 
+    trustAction_ = new QAction(tr("&Trust this model"), this);
+    trustAction_->setCheckable(true);
+    trustAction_->setEnabled(false);
+    trustAction_->setStatusTip(
+        tr("Remember that this file's Python is yours to run, and stop saying "
+           "so every time it opens"));
+    connect(trustAction_, &QAction::toggled, this,
+            &MainWindow::setModelTrusted);
+
     openAction_ = new QAction(appicons::open(), tr("&Open…"), this);
     openAction_->setShortcut(QKeySequence::Open);
     openAction_->setStatusTip(tr("Open a model file"));
@@ -247,6 +296,7 @@ void MainWindow::buildMenus() {
 
     fileMenu->addSeparator();
     fileMenu->addAction(autosaveAction_);
+    fileMenu->addAction(trustAction_);
 
     fileMenu->addSeparator();
     QAction* quitAction = fileMenu->addAction(tr("&Quit"));
@@ -667,6 +717,56 @@ void MainWindow::setDirty(bool dirty) {
     }
 }
 
+bool MainWindow::modelIsTrusted() const {
+    const QString fingerprint = executableFingerprint(model_);
+    if (fingerprint.isEmpty()) return true;  // nothing here to run
+    if (currentFile_.isEmpty()) return false;
+
+    const QVariantMap trusted =
+        QSettings().value(QLatin1String(kTrustedSetting)).toMap();
+    return trusted
+               .value(QFileInfo(currentFile_).absoluteFilePath())
+               .toString() == fingerprint;
+}
+
+void MainWindow::setModelTrusted(bool trusted) {
+    if (currentFile_.isEmpty()) return;
+
+    const QString key = QFileInfo(currentFile_).absoluteFilePath();
+    QSettings settings;
+    QVariantMap remembered =
+        settings.value(QLatin1String(kTrustedSetting)).toMap();
+
+    if (trusted) {
+        const QString fingerprint = executableFingerprint(model_);
+        if (fingerprint.isEmpty()) return;
+        remembered.insert(key, fingerprint);
+        console_->appendMessage(
+            tr("Trusting %1. It will open quietly until its Python changes.")
+                .arg(QFileInfo(currentFile_).fileName()));
+    } else {
+        if (!remembered.contains(key)) return;
+        remembered.remove(key);
+        console_->appendMessage(
+            tr("%1 is no longer trusted.")
+                .arg(QFileInfo(currentFile_).fileName()));
+    }
+
+    settings.setValue(QLatin1String(kTrustedSetting), remembered);
+    updateTrustAction();
+}
+
+void MainWindow::updateTrustAction() {
+    if (!trustAction_) return;
+
+    const bool carriesCode = !executableFingerprint(model_).isEmpty();
+    const bool applicable = carriesCode && !currentFile_.isEmpty();
+
+    trustAction_->setEnabled(applicable);
+    const QSignalBlocker quiet(trustAction_);
+    trustAction_->setChecked(applicable && modelIsTrusted());
+}
+
 void MainWindow::seedHistory() {
     history_.reset(ModelSerializer::toJson(model_, -1));
     updateUndoActions();
@@ -871,7 +971,7 @@ bool MainWindow::openFile(const QString& path) {
     ExecutableContent code;
     collectExecutable(model_, code);
     const bool hasInitScript = !model_.initScript().empty();
-    if (code.any() || hasInitScript) {
+    if ((code.any() || hasInitScript) && !modelIsTrusted()) {
         QStringList carried;
         if (code.scripts > 0)
             carried << tr("%n block script(s)", "", code.scripts);
@@ -882,7 +982,8 @@ bool MainWindow::openFile(const QString& path) {
         console_->appendMessage(
             tr("%1 carries Python: %2. It runs, unsandboxed, when you press "
                "Run — so treat a model from elsewhere as you would a script "
-               "from the same place.")
+               "from the same place. Once you have read it, "
+               "File ▸ Trust this model stops this notice.")
                 .arg(QFileInfo(path).fileName(),
                      carried.join(QStringLiteral(", "))));
     }
@@ -894,6 +995,9 @@ bool MainWindow::openFile(const QString& path) {
 bool MainWindow::writeModel(const QString& path, QString* error) {
     if (controls_ && !controller_->isBusy()) controls_->commitValues();
 
+    // Carry trust across your own edits; saving never grants it.
+    const bool wasTrusted = !currentFile_.isEmpty() && modelIsTrusted();
+
     try {
         ModelSerializer::save(model_, path.toStdString());
     } catch (const ModelError& failure) {
@@ -901,6 +1005,9 @@ bool MainWindow::writeModel(const QString& path, QString* error) {
         return false;
     }
     setDirty(false);
+
+    if (wasTrusted) setModelTrusted(true);
+    updateTrustAction();
     return true;
 }
 

@@ -648,6 +648,79 @@ void testOpeningSaysWhenAModelCarriesPython(const QString& modelPath) {
     }
 }
 
+void testTrustingAModelSilencesTheNotice() {
+    beginTest("Trusting a model quiets it, until its Python changes");
+
+    const auto consoleText = [](MainWindow& window) {
+        auto* view = window.findChild<QPlainTextEdit*>();
+        return view ? view->toPlainText() : QString();
+    };
+    const auto trustActionOf = [](MainWindow& window) -> QAction* {
+        for (QAction* action : window.findChildren<QAction*>())
+            if (action->text() == QStringLiteral("&Trust this model"))
+                return action;
+        return nullptr;
+    };
+
+    QTemporaryDir dir;
+    const QString path = dir.filePath(QStringLiteral("trusted.spy"));
+    check(QFile::copy(QStringLiteral("examples/python_lorenz.spy"), path),
+          "the Python example was copied somewhere writable");
+
+    {
+        MainWindow window;
+        check(window.openFile(path), "it opened");
+        QApplication::processEvents();
+        check(consoleText(window).contains(QStringLiteral("carries Python")),
+              "the first open says what it carries");
+
+        QAction* trust = trustActionOf(window);
+        check(trust != nullptr, "the trust action exists");
+        if (!trust) return;
+        check(trust->isEnabled(), "and is offered for a file that has code");
+        check(!trust->isChecked(), "unticked to begin with");
+
+        trust->setChecked(true);
+        QApplication::processEvents();
+    }
+
+    {
+        MainWindow window;
+        check(window.openFile(path), "it opened again");
+        QApplication::processEvents();
+        check(!consoleText(window).contains(QStringLiteral("carries Python")),
+              "the second open is quiet");
+        QAction* trust = trustActionOf(window);
+        check(trust && trust->isChecked(), "and the action shows it as trusted");
+    }
+
+    {
+        QFile file(path);
+        check(file.open(QIODevice::ReadOnly), "the file can be read back");
+        QByteArray text = file.readAll();
+        file.close();
+        check(text.contains("sigma"), "the Lorenz source is in there");
+        text.replace("sigma", "sigmb");
+
+        QFile out(path);
+        check(out.open(QIODevice::WriteOnly | QIODevice::Truncate),
+              "and written back");
+        out.write(text);
+        out.close();
+    }
+
+    {
+        MainWindow window;
+        check(window.openFile(path), "the altered file opened");
+        QApplication::processEvents();
+        check(consoleText(window).contains(QStringLiteral("carries Python")),
+              "changed Python asks the question again");
+        QAction* trust = trustActionOf(window);
+        check(trust && !trust->isChecked(),
+              "and the file is no longer shown as trusted");
+    }
+}
+
 void testDeletingSeveralBlocksDoesNotCrash() {
     beginTest("Deleting a multi-block selection in the window is safe");
 
@@ -1834,10 +1907,12 @@ int main(int argc, char** argv) {
     testCopyPasteThroughClipboard(modelPath);
     testCanvasShortcutsStayOnTheCanvas();
     testOpeningSaysWhenAModelCarriesPython(modelPath);
+    testTrustingAModelSilencesTheNotice();
     testDeletingSeveralBlocksDoesNotCrash();
     testUndoRedo();
     testUndoRestoresDeletionAndGrouping();
     testOpeningSaysWhenAModelCarriesPython(modelPath);
+    testTrustingAModelSilencesTheNotice();
     testDeletingSeveralBlocksDoesNotCrash();
     testDeleteRemovesSelection();
     testToolbarIconsDrawSomething();
