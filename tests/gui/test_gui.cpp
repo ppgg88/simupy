@@ -502,6 +502,32 @@ void testCanvasShortcutsStayOnTheCanvas() {
           "and Ctrl+V pastes them back");
 }
 
+void testDeletingSeveralBlocksDoesNotCrash() {
+    beginTest("Deleting a multi-block selection in the window is safe");
+
+    // A use-after-free the bare-scene tests never saw: nothing was listening.
+    MainWindow window;
+    window.resize(800, 600);
+    window.show();
+    QApplication::processEvents();
+
+    DiagramScene* scene = window.scene();
+    const QString a =
+        scene->addBlock(QStringLiteral("Constant"), QPointF(0, 0))->blockId();
+    const QString b =
+        scene->addBlock(QStringLiteral("Scope"), QPointF(300, 0))->blockId();
+    scene->model().connect(a.toStdString(), 0, b.toStdString(), 0);
+    scene->rebuild();
+    QApplication::processEvents();
+
+    scene->selectAll();
+    scene->deleteSelection();
+    QApplication::processEvents();
+
+    check(scene->model().blocks().empty(), "both blocks are gone");
+    check(scene->model().connections().empty(), "and so is the wire");
+}
+
 void testDeleteRemovesSelection() {
     beginTest("Delete removes the selection");
 
@@ -1661,6 +1687,8 @@ int main(int argc, char** argv) {
     testQuickAddGesture();
     testCopyPasteThroughClipboard(modelPath);
     testCanvasShortcutsStayOnTheCanvas();
+    testDeletingSeveralBlocksDoesNotCrash();
+    testDeletingSeveralBlocksDoesNotCrash();
     testDeleteRemovesSelection();
     testToolbarIconsDrawSomething();
     testDecimalEntryUnderACommaLocale();

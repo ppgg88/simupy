@@ -28,6 +28,9 @@ public:
 
     void rebuild();
 
+    /// Drop every item without reading the model. Call before replacing it.
+    void detach();
+
     BlockItem* itemForBlock(const QString& blockId) const;
     BlockItem* addBlock(const QString& typeName, const QPointF& scenePos);
 

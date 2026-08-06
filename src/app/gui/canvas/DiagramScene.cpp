@@ -20,6 +20,7 @@
 #include <QGraphicsSceneDragDropEvent>
 #include <QGraphicsSceneMouseEvent>
 #include <QInputDialog>
+#include <QSignalBlocker>
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QMenu>
@@ -48,11 +49,23 @@ QPointF DiagramScene::snap(const QPointF& point) {
                    std::round(point.y() / kGridStep) * kGridStep);
 }
 
-void DiagramScene::rebuild() {
+void DiagramScene::detach() {
     cancelPendingWire();
     blockItems_.clear();
     wireItems_.clear();
-    clear();
+
+    // A listener answering selectionChanged here would read, through
+    // BlockItem::block(), a Block the caller has just deleted.
+    {
+        const QSignalBlocker quiet(this);
+        clearSelection();
+        clear();
+    }
+    emit selectionChanged();
+}
+
+void DiagramScene::rebuild() {
+    detach();
 
     for (const BlockPtr& block : model_->blocks()) {
         auto* item = new BlockItem(*model_, block.get());
