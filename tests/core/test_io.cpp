@@ -328,7 +328,8 @@ void testFailedSaveKeepsThePreviousFile() {
           "a good save leaves no temporary behind");
     check(fs::file_size(target, code) > 8, "and the model went in");
 
-    // Root ignores the permission bit, so skip there rather than assert.
+    // Root ignores the permission bit, and Windows does not honour it on a
+    // directory at all, so skip there rather than assert something untrue.
     fs::permissions(dir, fs::perms::owner_read | fs::perms::owner_exec,
                     fs::perm_options::replace, code);
     bool stillWritable = false;
@@ -341,7 +342,8 @@ void testFailedSaveKeepsThePreviousFile() {
     const std::string before = fileContents(target);
 
     if (stillWritable) {
-        check(true, "skipped: the directory stayed writable, so this is root");
+        check(true,
+              "skipped: the directory stayed writable, as under root or Windows");
     } else {
         bool threw = false;
         try {

@@ -13,6 +13,8 @@
 #include "scripting/PythonEngine.h"
 #include "scripting/PythonPackages.h"
 
+#include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <set>
 #include <string>
@@ -508,9 +510,21 @@ void testPackageStatusAndDirectory() {
 
     PythonPackages& packages = PythonPackages::instance();
 
-    check(!packages.directory().empty(), "there is a package directory");
-    check(packages.directory().find("simupy") != std::string::npos,
+    const std::string directory = packages.directory();
+    check(!directory.empty(), "there is a package directory");
+
+    // Windows spells it %APPDATA%\SimuPy, the XDG folder simupy, so the name
+    // has to be matched without regard to case.
+    std::string folded = directory;
+    std::transform(folded.begin(), folded.end(), folded.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    check(folded.find("simupy") != std::string::npos,
           "and it belongs to SimuPy, not to the system");
+
+    const std::string leaf = "python-packages";
+    check(folded.size() >= leaf.size() &&
+              folded.compare(folded.size() - leaf.size(), leaf.size(), leaf) == 0,
+          "and it is the package folder, not some parent of it");
 
     const PackageStatus numpy = packages.status("numpy");
     check(numpy.installed, "numpy is seen as installed");
