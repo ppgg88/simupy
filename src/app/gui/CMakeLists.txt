@@ -14,6 +14,7 @@ qt_add_library(simupy-gui STATIC
     MainWindow.cpp
     NumberInput.cpp
     SimulationController.cpp
+    UndoHistory.cpp
 
     style/Theme.cpp
     style/AppIcons.cpp

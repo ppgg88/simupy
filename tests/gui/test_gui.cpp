@@ -502,6 +502,114 @@ void testCanvasShortcutsStayOnTheCanvas() {
           "and Ctrl+V pastes them back");
 }
 
+QAction* actionNamed(MainWindow& window, const QString& text) {
+    for (QAction* action : window.findChildren<QAction*>())
+        if (action->text() == text) return action;
+    return nullptr;
+}
+
+void testUndoRedo() {
+    beginTest("Undo takes an edit back and redo puts it there again");
+
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    QApplication::processEvents();
+
+    DiagramScene* scene = window.scene();
+    QAction* undo = actionNamed(window, QStringLiteral("&Undo"));
+    QAction* redo = actionNamed(window, QStringLiteral("&Redo"));
+    check(undo != nullptr && redo != nullptr, "the two actions exist");
+    if (!undo || !redo) return;
+
+    check(!undo->isEnabled(), "nothing to undo on an untouched model");
+
+    scene->addBlock(QStringLiteral("Constant"), QPointF(0, 0));
+    scene->addBlock(QStringLiteral("Scope"), QPointF(300, 0));
+    QApplication::processEvents();
+    check(scene->model().blocks().size() == 2, "two blocks went in");
+    check(undo->isEnabled(), "and undo is offered");
+
+    undo->trigger();
+    QApplication::processEvents();
+    check(window.scene()->model().blocks().size() == 1,
+          "undo takes the second block back");
+    check(redo->isEnabled(), "and redo is now offered");
+
+    undo->trigger();
+    QApplication::processEvents();
+    check(window.scene()->model().blocks().size() == 0,
+          "and again for the first");
+    check(!undo->isEnabled(), "with nothing left to undo");
+
+    redo->trigger();
+    redo->trigger();
+    QApplication::processEvents();
+    check(window.scene()->model().blocks().size() == 2,
+          "redo puts both back");
+    check(!redo->isEnabled(), "with nothing left to redo");
+
+    undo->trigger();
+    QApplication::processEvents();
+    window.scene()->addBlock(QStringLiteral("Gain"), QPointF(600, 0));
+    QApplication::processEvents();
+    check(!redo->isEnabled(), "a new edit throws the undone branch away");
+}
+
+void testUndoRestoresDeletionAndGrouping() {
+    beginTest("Undo brings back a deleted selection, and ungroups a grouping");
+
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    QApplication::processEvents();
+
+    DiagramScene* scene = window.scene();
+    QAction* undo = actionNamed(window, QStringLiteral("&Undo"));
+    if (!undo) return;
+
+    const QString a =
+        scene->addBlock(QStringLiteral("Constant"), QPointF(0, 0))->blockId();
+    const QString b =
+        scene->addBlock(QStringLiteral("Gain"), QPointF(300, 0))->blockId();
+    scene->model().connect(a.toStdString(), 0, b.toStdString(), 0);
+    scene->rebuild();
+
+    // The wire bypassed the scene, so no snapshot holds it yet; one more
+    // block through the scene gives history a state that does.
+    scene->addBlock(QStringLiteral("Scope"), QPointF(600, 0));
+    QApplication::processEvents();
+
+    const std::size_t wires = scene->model().connections().size();
+    const std::size_t blocks = scene->model().blocks().size();
+    check(wires == 1 && blocks == 3, "three blocks, one wire between two");
+
+    scene->selectAll();
+    scene->deleteSelection();
+    QApplication::processEvents();
+    check(window.scene()->model().blocks().empty(), "the selection is gone");
+
+    undo->trigger();
+    QApplication::processEvents();
+    check(window.scene()->model().blocks().size() == blocks,
+          "undo brings the selection back");
+    check(window.scene()->model().connections().size() == wires,
+          "with the wire between them, not just the blocks");
+
+    window.scene()->selectAll();
+    window.scene()->groupSelection();
+    QApplication::processEvents();
+    const std::size_t grouped = window.scene()->model().blocks().size();
+    check(grouped == 1, "grouping folded them into one subsystem");
+
+    undo->trigger();
+    QApplication::processEvents();
+    check(window.scene()->model().blocks().size() == blocks,
+          "and undo unfolds it again");
+    check(window.scene()->model().connections().size() == wires,
+          "wire and all");
+}
+
 void testDeletingSeveralBlocksDoesNotCrash() {
     beginTest("Deleting a multi-block selection in the window is safe");
 
@@ -1688,6 +1796,8 @@ int main(int argc, char** argv) {
     testCopyPasteThroughClipboard(modelPath);
     testCanvasShortcutsStayOnTheCanvas();
     testDeletingSeveralBlocksDoesNotCrash();
+    testUndoRedo();
+    testUndoRestoresDeletionAndGrouping();
     testDeletingSeveralBlocksDoesNotCrash();
     testDeleteRemovesSelection();
     testToolbarIconsDrawSomething();

@@ -134,6 +134,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
            std::min(950, available.height() - 80));
 
     setDirty(false);
+    seedHistory();
     rebuildBreadcrumb();
     updateStopTimeControls();
     refreshControlPanel();
@@ -194,6 +195,18 @@ void MainWindow::buildActions() {
     newAction_->setToolTip(tr("New model (Ctrl+N)"));
     connect(newAction_, &QAction::triggered, this, &MainWindow::newModel);
 
+    undoAction_ = new QAction(tr("&Undo"), this);
+    undoAction_->setShortcut(QKeySequence::Undo);
+    undoAction_->setStatusTip(tr("Take back the last change to the diagram"));
+    undoAction_->setEnabled(false);
+    connect(undoAction_, &QAction::triggered, this, &MainWindow::undo);
+
+    redoAction_ = new QAction(tr("&Redo"), this);
+    redoAction_->setShortcuts(QKeySequence::keyBindings(QKeySequence::Redo));
+    redoAction_->setStatusTip(tr("Put back the change that was taken away"));
+    redoAction_->setEnabled(false);
+    connect(redoAction_, &QAction::triggered, this, &MainWindow::redo);
+
     openAction_ = new QAction(appicons::open(), tr("&Open…"), this);
     openAction_->setShortcut(QKeySequence::Open);
     openAction_->setStatusTip(tr("Open a model file"));
@@ -222,6 +235,10 @@ void MainWindow::buildMenus() {
     connect(quitAction, &QAction::triggered, this, &MainWindow::close);
 
     QMenu* editMenu = menuBar()->addMenu(tr("&Edit"));
+
+    editMenu->addAction(undoAction_);
+    editMenu->addAction(redoAction_);
+    editMenu->addSeparator();
 
     QAction* quickAdd =
         editMenu->addAction(appicons::addBlock(), tr("&Add Block…"));
@@ -623,6 +640,91 @@ void MainWindow::setCurrentFile(const QString& path) {
 void MainWindow::setDirty(bool dirty) {
     dirty_ = dirty;
     updateWindowTitle();
+
+    // Every model mutation in the window passes through here.
+    if (dirty && !restoring_) {
+        history_.record(ModelSerializer::toJson(model_, -1));
+        updateUndoActions();
+    }
+}
+
+void MainWindow::seedHistory() {
+    history_.reset(ModelSerializer::toJson(model_, -1));
+    updateUndoActions();
+}
+
+void MainWindow::updateUndoActions() {
+    const bool idle = !controller_->isBusy();
+    if (undoAction_) undoAction_->setEnabled(idle && history_.canUndo());
+    if (redoAction_) redoAction_->setEnabled(idle && history_.canRedo());
+}
+
+QStringList MainWindow::openSubsystemNames() const {
+    QStringList names;
+    for (int i = 1; i < path_.size(); ++i) names << path_[i].name;
+    return names;
+}
+
+void MainWindow::reopenSubsystems(const QStringList& names) {
+    // By name: restoring invalidates every Model* the breadcrumb held.
+    for (const QString& name : names) {
+        Model* level = path_.last().model;
+        Block* found = nullptr;
+        for (const BlockPtr& block : level->blocks()) {
+            if (QString::fromStdString(block->name()) != name) continue;
+            if (dynamic_cast<SubsystemBlock*>(block.get())) found = block.get();
+            break;
+        }
+        if (!found) break;
+        enterSubsystem(found);
+    }
+}
+
+void MainWindow::restoreState(const std::string& state) {
+    if (state.empty()) return;
+
+    const QStringList reopen = openSubsystemNames();
+
+    restoring_ = true;
+
+    // Nothing may hold a Block pointer while fromJson replaces the model.
+    properties_->setBlock(nullptr, nullptr);
+    properties_->setMaskParameters({});
+    scene_->detach();
+
+    try {
+        ModelSerializer::fromJson(state, model_);
+    } catch (const ModelError& error) {
+        restoring_ = false;
+        console_->appendError(tr("Could not undo: %1")
+                                  .arg(QString::fromStdString(error.what())));
+        scene_->setModel(model_);
+        return;
+    }
+
+    path_ = {{&model_, tr("model"), {}}};
+    scene_->setModel(model_);
+    reopenSubsystems(reopen);
+
+    rebuildBreadcrumb();
+    updateRealTimeAction();
+    updateStopTimeControls();
+    refreshControlPanel();
+    restoring_ = false;
+
+    dirty_ = true;
+    updateWindowTitle();
+    updateUndoActions();
+}
+
+void MainWindow::undo() {
+    if (controller_->isBusy() || !history_.canUndo()) return;
+    restoreState(history_.undo());
+}
+
+void MainWindow::redo() {
+    if (controller_->isBusy() || !history_.canRedo()) return;
+    restoreState(history_.redo());
 }
 
 void MainWindow::updateWindowTitle() {
@@ -666,6 +768,7 @@ void MainWindow::newModel() {
     refreshControlPanel();
     setCurrentFile({});
     setDirty(false);
+    seedHistory();
     statusLabel_->setText(tr("New model"));
 }
 
@@ -702,6 +805,7 @@ bool MainWindow::openFile(const QString& path) {
     refreshControlPanel();
     setCurrentFile(path);
     setDirty(false);
+    seedHistory();
     view_->zoomToFit();
 
     PythonEngine::instance().addSearchPath(
@@ -1324,6 +1428,7 @@ void MainWindow::setEditingEnabled(bool enabled) {
     stopAction_->setEnabled(!enabled);
     if (realTimeAction_) realTimeAction_->setEnabled(enabled);
     if (unboundedAction_) unboundedAction_->setEnabled(enabled);
+    updateUndoActions();
 
     if (controls_) controls_->setEnabled(true);
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "SimulationController.h"
+#include "app/gui/UndoHistory.h"
 #include "model/Model.h"
 
 #include <QHash>
@@ -121,6 +122,14 @@ private:
     void rebuildBreadcrumb();
     bool insideSubsystem() const { return path_.size() > 1; }
 
+    void undo();
+    void redo();
+    void seedHistory();
+    void restoreState(const std::string& state);
+    void updateUndoActions();
+    QStringList openSubsystemNames() const;
+    void reopenSubsystems(const QStringList& names);
+
     Model model_;
 
     struct Level {
@@ -148,6 +157,10 @@ private:
     QString currentFile_;
     bool dirty_ = false;
 
+    UndoHistory history_;
+    /// Set while restoring, so its own edits do not record fresh history.
+    bool restoring_ = false;
+
     QTimer* autosaveTimer_ = nullptr;
     QString autosaveError_;
 
@@ -159,6 +172,8 @@ private:
     QAction* realTimeAction_ = nullptr;
     QAction* unboundedAction_ = nullptr;
     QAction* openAction_ = nullptr;
+    QAction* undoAction_ = nullptr;
+    QAction* redoAction_ = nullptr;
     QLineEdit* stopTimeField_ = nullptr;
     QLabel* statusLabel_ = nullptr;
     QLabel* timeLabel_ = nullptr;
