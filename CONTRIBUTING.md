@@ -113,8 +113,8 @@ saves a comment in the code.
 * Say how you verified it, not just that you did.
 * Update the documentation in the same change. `docs/` is built with `-W`, so a
   stale cross-reference fails CI.
-* Add an entry to [CHANGELOG.md](CHANGELOG.md) under the unreleased heading for
-  anything a user would notice.
+* Say plainly in the description what a user would notice, so it can be lifted
+  into the release notes.
 
 ## Security
 

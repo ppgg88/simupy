@@ -1,0 +1,83 @@
+name: Bug report
+description: Something behaves differently from what the documentation says
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing: **running a model runs its Python, unsandboxed, by
+        design.** That is not a bug — see [SECURITY.md](https://github.com/ppgg88/simupy/blob/main/SECURITY.md).
+        If you believe you have found something exploitable, do not open an
+        issue; use Security → Report a vulnerability instead.
+
+  - type: textarea
+    id: what-happens
+    attributes:
+      label: What happens
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: >
+        The shortest sequence that shows it. A model file that triggers it is
+        worth more than a description — drag the .spy or .spylib in, or paste
+        it if it is small.
+      placeholder: |
+        1. Open …
+        2. Press F5
+        3. …
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: SimuPy version
+      description: >
+        The release, or the commit if you built it yourself
+        (`git rev-parse --short HEAD`).
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you installed it
+      options:
+        - Built from source
+        - Flatpak bundle
+        - Windows installer
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      placeholder: "Ubuntu 24.04, Wayland — or Windows 11"
+    validations:
+      required: true
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Console output
+      description: >
+        Anything the Console dock said, or what `simupy-cli run yourmodel.spy`
+        printed. This is pasted as code, so no backticks needed.
+      render: text
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues
+          required: true
+        - label: I am on the latest release, or I have said which commit I am on
+          required: true

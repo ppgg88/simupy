@@ -1,0 +1,12 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/ppgg88/simupy/security/advisories/new
+    about: >
+      Report privately, never as an issue. Note that a model running its own
+      Python is by design — SECURITY.md says what is and is not in scope.
+  - name: Question about using SimuPy
+    url: https://github.com/ppgg88/simupy/discussions
+    about: >
+      Ask in Discussions. Check docs/ first — the guide covers the editor,
+      subsystems, signals, simulation, controls, libraries and hardware.
