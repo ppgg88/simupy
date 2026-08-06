@@ -53,6 +53,25 @@ namespace {
 
 constexpr const char* kFileFilter = "SimuPy models (*.spy);;All files (*)";
 
+/// Block sources and mask expressions, counted through every subsystem.
+struct ExecutableContent {
+    int scripts = 0;
+    int expressions = 0;
+
+    bool any() const { return scripts > 0 || expressions > 0; }
+};
+
+void collectExecutable(const Model& model, ExecutableContent& found) {
+    for (const BlockPtr& block : model.blocks()) {
+        if (!block->params().textOr("code", {}).empty()) ++found.scripts;
+        found.expressions +=
+            static_cast<int>(block->paramExpressions().size());
+        if (const auto* subsystem =
+                dynamic_cast<const SubsystemBlock*>(block.get()))
+            collectExecutable(subsystem->contents(), found);
+    }
+}
+
 constexpr int kAutosaveIntervalMs = 30000;
 constexpr const char* kAutosaveSetting = "editor/autosave";
 
@@ -844,6 +863,28 @@ bool MainWindow::openFile(const QString& path) {
         for (const std::string& dropped : report.droppedConnections)
             console_->appendError(
                 QStringLiteral("  ") + QString::fromStdString(dropped));
+    }
+
+    // A .spy looks like a data file; say once, on the way in, that it is not.
+    updateTrustAction();
+
+    ExecutableContent code;
+    collectExecutable(model_, code);
+    const bool hasInitScript = !model_.initScript().empty();
+    if (code.any() || hasInitScript) {
+        QStringList carried;
+        if (code.scripts > 0)
+            carried << tr("%n block script(s)", "", code.scripts);
+        if (code.expressions > 0)
+            carried << tr("%n mask expression(s)", "", code.expressions);
+        if (hasInitScript) carried << tr("an init script");
+
+        console_->appendMessage(
+            tr("%1 carries Python: %2. It runs, unsandboxed, when you press "
+               "Run — so treat a model from elsewhere as you would a script "
+               "from the same place.")
+                .arg(QFileInfo(path).fileName(),
+                     carried.join(QStringLiteral(", "))));
     }
 
     statusLabel_->setText(tr("Opened %1").arg(QFileInfo(path).fileName()));

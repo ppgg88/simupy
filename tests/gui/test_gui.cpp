@@ -37,6 +37,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QSettings>
+#include <QPlainTextEdit>
 #include <QPushButton>
 #include <QKeyEvent>
 #include <QLineEdit>
@@ -608,6 +609,43 @@ void testUndoRestoresDeletionAndGrouping() {
           "and undo unfolds it again");
     check(window.scene()->model().connections().size() == wires,
           "wire and all");
+}
+
+void testOpeningSaysWhenAModelCarriesPython(const QString& modelPath) {
+    beginTest("Opening a model that carries Python says so");
+
+    const auto consoleText = [](MainWindow& window) {
+        auto* view = window.findChild<QPlainTextEdit*>();
+        return view ? view->toPlainText() : QString();
+    };
+
+    const QString withPython = QStringLiteral("examples/python_lorenz.spy");
+    if (!QFileInfo::exists(withPython)) {
+        check(false, "the Python example is where the test expects it");
+        return;
+    }
+
+    {
+        MainWindow window;
+        check(window.openFile(withPython), "the Python example opened");
+        QApplication::processEvents();
+        const QString text = consoleText(window);
+        check(text.contains(QStringLiteral("carries Python")),
+              "the notice names what the file would run");
+        check(text.contains(QStringLiteral("block script")),
+              "counting the scripts it found");
+        check(text.contains(QStringLiteral("unsandboxed")),
+              "and does not soften what that means");
+    }
+
+    // modelPath is all C++ blocks: nothing to run, so nothing to say.
+    {
+        MainWindow window;
+        check(window.openFile(modelPath), "the plain example opened too");
+        QApplication::processEvents();
+        check(!consoleText(window).contains(QStringLiteral("carries Python")),
+              "a model with no code says nothing");
+    }
 }
 
 void testDeletingSeveralBlocksDoesNotCrash() {
@@ -1795,9 +1833,11 @@ int main(int argc, char** argv) {
     testQuickAddGesture();
     testCopyPasteThroughClipboard(modelPath);
     testCanvasShortcutsStayOnTheCanvas();
+    testOpeningSaysWhenAModelCarriesPython(modelPath);
     testDeletingSeveralBlocksDoesNotCrash();
     testUndoRedo();
     testUndoRestoresDeletionAndGrouping();
+    testOpeningSaysWhenAModelCarriesPython(modelPath);
     testDeletingSeveralBlocksDoesNotCrash();
     testDeleteRemovesSelection();
     testToolbarIconsDrawSomething();

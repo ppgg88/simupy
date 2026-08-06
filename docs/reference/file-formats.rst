@@ -5,6 +5,13 @@ File formats
 Both are plain JSON: readable in a diff, editable by hand, and sensible to
 keep under version control.
 
+.. warning::
+
+   Being JSON does not make them data. A model carries Python — block sources,
+   an init script, mask expressions — and running it runs all of that, with
+   your privileges and no sandbox. See :doc:`../limitations` for what runs
+   when.
+
 Models — |spy|
 ==============
 

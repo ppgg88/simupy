@@ -84,6 +84,44 @@ A control change lands at the next evaluation
    toggle or a button it is a discontinuity crossed blind, so cap the maximum
    step if the switching instant matters.
 
+Trust
+=====
+
+.. warning::
+
+   Running a model runs its Python, unsandboxed, with your privileges. A
+   |spy| file is not the inert data file its JSON appearance suggests. Treat
+   one that arrives from elsewhere exactly as you would treat a ``.py`` script
+   from the same place.
+
+Running a model executes everything in it
+   Pressing :kbd:`F5`, or ``simupy-cli run``, compiles and runs the model's
+   init script, every Python block's source, every Python block's parameters
+   script, and every mask parameter expression. All of it runs in the embedded
+   interpreter with the full builtins available, so any of it can import
+   :py:mod:`os`, open sockets, or read and write your files. There is no
+   sandbox, and adding one would defeat the point of the product.
+
+   A mask expression is the part worth naming, because it does not look like
+   code: a field meant to hold ``2*pi/T`` will just as happily hold
+   ``__import__('os').system(...)``.
+
+Opening a model does not run anything
+   Loading a |spy| deserializes it and no more. What it does do is add the
+   file's own directory to :py:data:`sys.path`, for the rest of the session
+   and for every model opened after it — so a module dropped beside a |spy|
+   becomes importable by anything that later runs.
+
+Breaking a masked subsystem open evaluates its expressions
+   :kbd:`Ctrl+Shift+G` has to resolve the mask to hand its values down, which
+   means running those expressions. It is the one editing action that executes
+   model-supplied code without a run.
+
+``ToFile`` writes wherever it is pointed
+   The path is an ordinary block parameter, taken as given, so a model can
+   write anywhere the process can. This is a plain consequence of the block
+   existing, not a defect in it.
+
 Hardware
 ========
 
