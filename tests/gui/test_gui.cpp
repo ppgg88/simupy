@@ -721,6 +721,88 @@ void testTrustingAModelSilencesTheNotice() {
     }
 }
 
+void testSimulationControllerReportsBothOutcomes() {
+    beginTest("The run controller reports finishing, and failing, on its own");
+
+    struct Outcome {
+        bool arrived = false;
+        bool ok = false;
+        QString error;
+        QString summary;
+        int logs = 0;
+    };
+
+    const auto runToCompletion = [](Model& model, Outcome& outcome) {
+        SimulationController controller;
+        QObject::connect(&controller, &SimulationController::completed,
+                         [&outcome](bool ok, QString error, QString summary) {
+                             outcome.arrived = true;
+                             outcome.ok = ok;
+                             outcome.error = std::move(error);
+                             outcome.summary = std::move(summary);
+                         });
+        QObject::connect(&controller, &SimulationController::dataUpdated,
+                         [&outcome](const SignalLogPtr&) { ++outcome.logs; });
+
+        controller.start(model);
+
+        QElapsedTimer clock;
+        clock.start();
+        while (!outcome.arrived && clock.elapsed() < 10000)
+            QApplication::processEvents();
+        controller.requestStop();
+        controller.wait(5000);
+        QApplication::processEvents();
+    };
+
+    {
+        Model model;
+        Block* source = model.addBlock("Constant", 0, 0);
+        source->params().set("value", std::vector<double>{2.0});
+        Block* integrator = model.addBlock("Integrator", 200, 0);
+        Block* scope = model.addBlock("Scope", 400, 0);
+        model.connect(source->id(), 0, integrator->id(), 0);
+        model.connect(integrator->id(), 0, scope->id(), 0);
+        model.solver().stopTime = 1.0;
+
+        Outcome outcome;
+        runToCompletion(model, outcome);
+
+        check(outcome.arrived, "a good model reports back");
+        check(outcome.ok, "and reports success");
+        check(outcome.error.isEmpty(), "with no error to show");
+        check(outcome.summary.contains(QStringLiteral("steps")),
+              "and a summary that counts the steps: " +
+                  outcome.summary.toStdString());
+        check(outcome.logs > 0, "having delivered at least one log");
+    }
+
+    {
+        // Unity positive feedback: no unique solution.
+        Model model;
+        Block* step = model.addBlock("Step", 0, 0);
+        Block* sum = model.addBlock("Sum", 200, 0);
+        sum->params().set("signs", std::string("++"));
+        Block* gain = model.addBlock("Gain", 400, 0);
+        gain->params().set("gain", std::vector<double>{1.0});
+        Block* scope = model.addBlock("Scope", 600, 0);
+        model.connect(step->id(), 0, sum->id(), 0);
+        model.connect(gain->id(), 0, sum->id(), 1);
+        model.connect(sum->id(), 0, gain->id(), 0);
+        model.connect(gain->id(), 0, scope->id(), 0);
+        model.solver().stopTime = 1.0;
+
+        Outcome outcome;
+        runToCompletion(model, outcome);
+
+        check(outcome.arrived, "a bad model reports back too");
+        check(!outcome.ok, "reporting failure");
+        check(outcome.error.contains(QStringLiteral("algebraic loop")),
+              "and saying what went wrong: " +
+                  outcome.error.toStdString());
+    }
+}
+
 void testDeletingSeveralBlocksDoesNotCrash() {
     beginTest("Deleting a multi-block selection in the window is safe");
 
@@ -1908,11 +1990,13 @@ int main(int argc, char** argv) {
     testCanvasShortcutsStayOnTheCanvas();
     testOpeningSaysWhenAModelCarriesPython(modelPath);
     testTrustingAModelSilencesTheNotice();
+    testSimulationControllerReportsBothOutcomes();
     testDeletingSeveralBlocksDoesNotCrash();
     testUndoRedo();
     testUndoRestoresDeletionAndGrouping();
     testOpeningSaysWhenAModelCarriesPython(modelPath);
     testTrustingAModelSilencesTheNotice();
+    testSimulationControllerReportsBothOutcomes();
     testDeletingSeveralBlocksDoesNotCrash();
     testDeleteRemovesSelection();
     testToolbarIconsDrawSomething();
