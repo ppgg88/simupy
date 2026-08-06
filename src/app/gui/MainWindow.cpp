@@ -14,6 +14,7 @@
 #include "app/gui/canvas/DiagramView.h"
 #include "app/gui/dialogs/LibraryManagerDialog.h"
 #include "app/gui/panels/PropertyPanel.h"
+#include "app/gui/dialogs/PackageRequirementsDialog.h"
 #include "app/gui/dialogs/PythonEditor.h"
 #include "app/gui/dialogs/ScopeWindow.h"
 #include "app/gui/dialogs/SolverSettingsDialog.h"
@@ -434,6 +435,13 @@ void MainWindow::buildMenus() {
     settingsAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_E));
     connect(settingsAction, &QAction::triggered, this,
             &MainWindow::showSolverSettings);
+
+    QAction* packagesAction =
+        simulationMenu->addAction(tr("&Python Packages…"));
+    packagesAction->setStatusTip(
+        tr("Declare the Python packages this model's own blocks import"));
+    connect(packagesAction, &QAction::triggered, this,
+            &MainWindow::showPythonPackages);
 
     QMenu* libraryMenu = menuBar()->addMenu(tr("&Library"));
 
@@ -1697,6 +1705,45 @@ void MainWindow::showSolverSettings() {
     setDirty(true);
     updateStopTimeControls();
     updateRealTimeAction();
+}
+
+namespace {
+
+/// Every Python source in a model, subsystems included.
+void gatherPythonSources(const Model& model, std::vector<std::string>& out) {
+    for (const BlockPtr& block : model.blocks()) {
+        for (const char* key : {"code", "parameters"}) {
+            const std::string text = block->params().textOr(key, {});
+            if (!text.empty()) out.push_back(text);
+        }
+        if (const auto* subsystem =
+                dynamic_cast<const SubsystemBlock*>(block.get()))
+            gatherPythonSources(subsystem->contents(), out);
+    }
+}
+
+}
+
+void MainWindow::showPythonPackages() {
+    if (controller_->isBusy()) return;
+
+    std::vector<std::string> sources;
+    if (!model_.initScript().empty()) sources.push_back(model_.initScript());
+    gatherPythonSources(model_, sources);
+
+    const QString subject = currentFile_.isEmpty()
+                                ? tr("This model")
+                                : QFileInfo(currentFile_).fileName();
+
+    PackageRequirementsDialog dialog(subject, model_.pythonPackages(),
+                                     std::move(sources), this);
+    if (dialog.exec() != QDialog::Accepted) return;
+
+    const std::vector<PackageRequirement> edited = dialog.requirements();
+    if (edited == model_.pythonPackages()) return;
+
+    model_.pythonPackages() = edited;
+    setDirty(true);
 }
 
 void MainWindow::showBlockReference() {

@@ -123,6 +123,13 @@ public:
     const std::string& name() const { return name_; }
     void setName(std::string v) { name_ = std::move(v); }
 
+    /// Python packages the model's own blocks import. A block written in the
+    /// diagram belongs to no library, so the model is the only place to say.
+    std::vector<PackageRequirement>& pythonPackages() { return python_; }
+    const std::vector<PackageRequirement>& pythonPackages() const {
+        return python_;
+    }
+
     const std::string& initScript() const { return initScript_; }
     void setInitScript(std::string v) { initScript_ = std::move(v); }
 
@@ -137,6 +144,7 @@ private:
     SolverSettings solver_;
     std::string name_ = "untitled";
     std::string initScript_;
+    std::vector<PackageRequirement> python_;
     int idCounter_ = 0;
 };
 

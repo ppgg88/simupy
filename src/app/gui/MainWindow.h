@@ -80,6 +80,7 @@ private slots:
     void runSimulation();
     void stopSimulation();
     void showSolverSettings();
+    void showPythonPackages();
 
     void onBlockEditRequested(BlockItem* item);
     void onSelectionChanged();

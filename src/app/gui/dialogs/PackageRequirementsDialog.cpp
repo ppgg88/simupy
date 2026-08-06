@@ -19,11 +19,11 @@ enum Column { kModule = 0, kPackage = 1, kPurpose = 2, kStatus = 3 };
 
 }
 
-PackageRequirementsDialog::PackageRequirementsDialog(CustomLibrary& library,
-                                                     QWidget* parent)
-    : QDialog(parent), library_(library) {
-    setWindowTitle(tr("%1 — Python packages")
-                       .arg(QString::fromStdString(library.name)));
+PackageRequirementsDialog::PackageRequirementsDialog(
+    const QString& subject, std::vector<PackageRequirement> declared,
+    std::vector<std::string> sources, QWidget* parent)
+    : QDialog(parent), sources_(std::move(sources)) {
+    setWindowTitle(tr("%1 — Python packages").arg(subject));
     setModal(true);
     resize(640, 380);
 
@@ -46,7 +46,7 @@ PackageRequirementsDialog::PackageRequirementsDialog(CustomLibrary& library,
 
     auto* detectButton = new QPushButton(tr("Detect from blocks"), this);
     detectButton->setToolTip(
-        tr("Read the library's Python sources and add what they import."));
+        tr("Read the Python sources and add what they import."));
     auto* addButton = new QPushButton(tr("Add"), this);
     removeButton_ = new QPushButton(tr("Remove"), this);
 
@@ -79,7 +79,7 @@ PackageRequirementsDialog::PackageRequirementsDialog(CustomLibrary& library,
     connect(table_, &QTableWidget::itemChanged, this,
             [this] { refreshStatus(); });
 
-    for (const PackageRequirement& need : library_.requires_) addRow(need);
+    for (const PackageRequirement& need : declared) addRow(need);
     removeButton_->setEnabled(false);
     refreshStatus();
 }
@@ -112,17 +112,12 @@ void PackageRequirementsDialog::detectFromBlocks() {
         already.insert(table_->item(row, kModule)->text().toStdString());
 
     int added = 0;
-    for (const CustomBlockDef& def : library_.blocks) {
-        std::string source = def.code;
-        if (!def.parameterScript.empty())
-            source += "\n" + def.parameterScript;
-
+    for (const std::string& source : sources_)
         for (const PackageRequirement& need : detectRequirements(source)) {
             if (!already.insert(need.module).second) continue;
             addRow(need);
             ++added;
         }
-    }
 
     note_->setText(added > 0
                        ? tr("Added %n module(s) found in the sources. A static "

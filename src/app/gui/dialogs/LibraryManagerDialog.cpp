@@ -207,7 +207,16 @@ void LibraryManagerDialog::editPackages() {
         LibraryManager::instance().library(selectedLibrary().toStdString());
     if (!library) return;
 
-    PackageRequirementsDialog dialog(*library, this);
+    std::vector<std::string> sources;
+    for (const CustomBlockDef& def : library->blocks) {
+        if (!def.code.empty()) sources.push_back(def.code);
+        if (!def.parameterScript.empty())
+            sources.push_back(def.parameterScript);
+    }
+
+    PackageRequirementsDialog dialog(QString::fromStdString(library->name),
+                                     library->requires_, std::move(sources),
+                                     this);
     if (dialog.exec() != QDialog::Accepted) return;
 
     library->requires_ = dialog.requirements();

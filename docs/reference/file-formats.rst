@@ -105,7 +105,8 @@ either a diagram or a Python source:
 plain text for a label.
 
 ``python`` lists the packages the blocks import, and is absent when they import
-nothing beyond what SimuPy ships. ``package`` is the pip name, given only when
+nothing beyond what SimuPy ships. A model carries the same field, for blocks
+written into the diagram rather than saved into a library. ``package`` is the pip name, given only when
 it differs from the module; ``purpose`` is shown to whoever is missing it. See
 :doc:`../guide/libraries`.
 

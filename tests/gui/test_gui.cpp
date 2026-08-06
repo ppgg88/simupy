@@ -579,7 +579,11 @@ class Driver(Block):
     library.blocks.push_back(def);
     library.requires_ = {{"numpy", "", "arrays"}};
 
-    PackageRequirementsDialog dialog(library);
+    std::vector<std::string> sources;
+    for (const CustomBlockDef& block : library.blocks) sources.push_back(block.code);
+
+    PackageRequirementsDialog dialog(QString::fromStdString(library.name),
+                                     library.requires_, std::move(sources));
     dialog.show();
     QApplication::processEvents();
 

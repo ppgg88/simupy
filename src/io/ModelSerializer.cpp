@@ -74,6 +74,17 @@ std::string ModelSerializer::toJson(const Model& model, int indent) {
     if (!model.initScript().empty())
         document["initScript"] = model.initScript();
 
+    if (!model.pythonPackages().empty()) {
+        json requirements = json::array();
+        for (const PackageRequirement& need : model.pythonPackages()) {
+            json node{{"module", need.module}};
+            if (!need.package.empty()) node["package"] = need.package;
+            if (!need.purpose.empty()) node["purpose"] = need.purpose;
+            requirements.push_back(std::move(node));
+        }
+        document["python"] = std::move(requirements);
+    }
+
     std::map<std::string, int> used;
     collectLibraries(model, used);
     if (!used.empty()) {
@@ -107,6 +118,16 @@ void ModelSerializer::fromJson(const std::string& text, Model& model,
     model.clear();
     model.setName(document.value("name", std::string("untitled")));
     model.setInitScript(document.value("initScript", std::string()));
+
+    model.pythonPackages().clear();
+    for (const json& node : document.value("python", json::array())) {
+        PackageRequirement need;
+        need.module = node.value("module", std::string());
+        need.package = node.value("package", std::string());
+        need.purpose = node.value("purpose", std::string());
+        if (!need.module.empty())
+            model.pythonPackages().push_back(std::move(need));
+    }
     if (document.contains("solver")) decodeSolver(document["solver"], model.solver());
 
     DecodeReport decoded;

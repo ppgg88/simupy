@@ -1,25 +1,12 @@
 #pragma once
 
+#include "model/Types.h"
+
 #include <functional>
 #include <string>
 #include <vector>
 
 namespace simupy {
-
-/// What a block library needs from Python.
-struct PackageRequirement {
-    /// What the code imports: `serial`.
-    std::string module;
-    /// What pip installs, when it differs: `pyserial`.
-    std::string package;
-    /// Shown to the user, so a missing package explains itself.
-    std::string purpose;
-
-    /// The name to hand pip.
-    std::string installName() const {
-        return package.empty() ? module : package;
-    }
-};
 
 struct PackageStatus {
     bool installed = false;

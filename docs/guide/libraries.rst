@@ -98,14 +98,19 @@ A library whose blocks ``import scipy`` is not self-contained the way one made
 of subsystems is: the file carries the code, not the package it needs. So a
 library can say what it needs, and SimuPy can fetch it.
 
-Everything is in :menuselection:`Library --> Manage Libraries`. Select a
+For a library: :menuselection:`Library --> Manage Libraries`, select the
 library — the library, not one of its blocks — and the panel below lists its
 packages against the interpreter actually running: installed and at what
 version, or missing and under what pip name.
-
-:guilabel:`Python packages…` opens the list to edit, with
-:guilabel:`Detect from blocks` to read it off the sources.
+:guilabel:`Python packages…` opens the list to edit, and
 :guilabel:`Install packages` lights up when something is missing.
+
+For a model: :menuselection:`Simulation --> Python Packages…`. A block written
+straight into a diagram belongs to no library, so its dependency is recorded in
+the |spy| itself and travels with it.
+
+Both open the same editor, with :guilabel:`Detect from blocks` to read the
+list off the sources.
 
 Where they go
 -------------

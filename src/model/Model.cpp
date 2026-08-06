@@ -198,6 +198,7 @@ void Model::clear() {
     idCounter_ = 0;
     initScript_.clear();
     solver_ = SolverSettings{};
+    python_.clear();
 }
 
 }

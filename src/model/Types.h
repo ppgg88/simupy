@@ -29,6 +29,25 @@ public:
 
 using ParamValue = std::variant<double, bool, std::string, std::vector<double>>;
 
+/// A Python package a model or a library needs.
+struct PackageRequirement {
+    /// What the code imports: `serial`.
+    std::string module;
+    /// What pip installs, when it differs: `pyserial`.
+    std::string package;
+    /// Shown to the user, so a missing package explains itself.
+    std::string purpose;
+
+    std::string installName() const {
+        return package.empty() ? module : package;
+    }
+
+    bool operator==(const PackageRequirement& other) const {
+        return module == other.module && package == other.package &&
+               purpose == other.purpose;
+    }
+};
+
 struct ParamSpec {
     enum class Kind { Real, Integer, Boolean, Text, Choice, Vector, PythonCode };
 

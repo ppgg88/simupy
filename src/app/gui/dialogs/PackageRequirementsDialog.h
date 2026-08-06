@@ -12,17 +12,22 @@ QT_END_NAMESPACE
 
 namespace simupy {
 
-/// Edits the Python packages a library declares.
+/// Edits the Python packages a model or a library declares.
 ///
-/// Per library rather than per block: the packages are what the whole file
-/// needs, and it is the file that gets shared.
+/// Per file rather than per block: the packages are what the whole thing needs,
+/// and it is the whole thing that gets shared or handed on.
 class PackageRequirementsDialog : public QDialog {
     Q_OBJECT
 
 public:
-    PackageRequirementsDialog(CustomLibrary& library, QWidget* parent = nullptr);
+    /// `sources` is the Python the detector reads — every block's script, and
+    /// a model's init script.
+    PackageRequirementsDialog(const QString& subject,
+                              std::vector<PackageRequirement> declared,
+                              std::vector<std::string> sources,
+                              QWidget* parent = nullptr);
 
-    /// What the table holds now, in library order.
+    /// What the table holds now, in order.
     std::vector<PackageRequirement> requirements() const;
 
 private:
@@ -31,7 +36,7 @@ private:
     void removeSelected();
     void refreshStatus();
 
-    CustomLibrary& library_;
+    std::vector<std::string> sources_;
     QTableWidget* table_ = nullptr;
     QLabel* note_ = nullptr;
     QPushButton* removeButton_ = nullptr;

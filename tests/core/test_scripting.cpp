@@ -444,6 +444,47 @@ void testLibraryRequirementsRoundTrip() {
           "and a library needing nothing writes no requirements at all");
 }
 
+void testModelRequirementsRoundTrip() {
+    beginTest("A model remembers the Python its own blocks need");
+
+    // A block written straight into a diagram belongs to no library, so the
+    // model is the only place its dependency can be recorded.
+    Model model;
+    Block* block = model.addBlock("PythonFunction", 0, 0);
+    block->params().set("code", std::string(R"(
+import scipy.signal
+from simupy import Block
+
+class Filter(Block):
+    def output(self, t, u):
+        return 0.0
+)"));
+    Block* scope = model.addBlock("Scope", 300, 0);
+    model.connect(block->id(), 0, scope->id(), 0);
+
+    model.pythonPackages() = {{"scipy", "", "filter design"}};
+
+    Model restored;
+    ModelSerializer::fromJson(ModelSerializer::toJson(model), restored);
+
+    check(restored.pythonPackages().size() == 1, "the requirement survives");
+    if (restored.pythonPackages().empty()) return;
+    check(restored.pythonPackages()[0].module == "scipy", "with its module");
+    check(restored.pythonPackages()[0].purpose == "filter design",
+          "and its reason");
+
+    // Loading a second model must not inherit the first one's.
+    Model plain;
+    plain.addBlock("Constant", 0, 0);
+    check(ModelSerializer::toJson(plain).find("\"python\"") ==
+              std::string::npos,
+          "a model needing nothing writes no requirements");
+
+    ModelSerializer::fromJson(ModelSerializer::toJson(plain), restored);
+    check(restored.pythonPackages().empty(),
+          "and loading it clears what was there before");
+}
+
 void testPackageStatusAndDirectory() {
     beginTest("Package status reads the interpreter SimuPy actually uses");
 
@@ -467,6 +508,7 @@ void testPackageStatusAndDirectory() {
 void runScriptingTests() {
     runTest(testDetectedRequirements);
     runTest(testLibraryRequirementsRoundTrip);
+    runTest(testModelRequirementsRoundTrip);
     runTest(testPackageStatusAndDirectory);
     runTest(testCustomBlockMask);
     runTest(testCustomBlockInstancesAreIndependent);
