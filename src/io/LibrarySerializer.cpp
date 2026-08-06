@@ -158,6 +158,17 @@ std::string LibrarySerializer::toJson(const CustomLibrary& library, int indent) 
     if (!library.description.empty()) document["description"] = library.description;
     if (!library.author.empty()) document["author"] = library.author;
 
+    if (!library.requires_.empty()) {
+        json requirements = json::array();
+        for (const PackageRequirement& need : library.requires_) {
+            json node{{"module", need.module}};
+            if (!need.package.empty()) node["package"] = need.package;
+            if (!need.purpose.empty()) node["purpose"] = need.purpose;
+            requirements.push_back(std::move(node));
+        }
+        document["python"] = std::move(requirements);
+    }
+
     json blocks = json::array();
     for (const CustomBlockDef& def : library.blocks)
         blocks.push_back(encodeBlock(def));
@@ -188,6 +199,15 @@ void LibrarySerializer::fromJson(const std::string& text, CustomLibrary& library
     library.revision = document.value("revision", 1);
     library.description = document.value("description", std::string());
     library.author = document.value("author", std::string());
+
+    library.requires_.clear();
+    for (const json& node : document.value("python", json::array())) {
+        PackageRequirement need;
+        need.module = node.value("module", std::string());
+        need.package = node.value("package", std::string());
+        need.purpose = node.value("purpose", std::string());
+        if (!need.module.empty()) library.requires_.push_back(std::move(need));
+    }
 
     decoding("this library file", [&] {
         for (const json& node : document.value("blocks", json::array())) {

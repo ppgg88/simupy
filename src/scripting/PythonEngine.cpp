@@ -2,6 +2,7 @@
 
 #include "PythonApi.h"
 #include "PythonError.h"
+#include "PythonPackages.h"
 
 #include <pybind11/embed.h>
 #include <pybind11/pybind11.h>
@@ -96,6 +97,11 @@ void PythonEngine::initialize(const std::vector<std::string>& searchPaths) {
     }
 
     ready_ = true;
+
+    // Ours before anything else: a package SimuPy installed should win over a
+    // half-broken copy elsewhere on the path.
+    addSearchPath(PythonPackages::instance().directory());
+
     for (const std::string& path : searchPaths) addSearchPath(path);
 }
 

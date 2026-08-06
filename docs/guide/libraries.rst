@@ -91,6 +91,55 @@ name it wants even while standing in as a plain subsystem.
    opposite of what a Simulink library link does. Re-drop the block to take a
    new version.
 
+Python packages
+===============
+
+A library whose blocks ``import scipy`` is not self-contained the way one made
+of subsystems is: the file carries the code, not the package it needs. So a
+library can say what it needs, and SimuPy can fetch it.
+
+Declare them, and :menuselection:`Library --> Manage Libraries` shows each one
+against the interpreter actually running — installed and at what version, or
+missing and under what pip name. :guilabel:`Install packages` lights up when
+something is missing.
+
+Where they go
+-------------
+
+Into SimuPy's own folder, ``~/.local/share/simupy/python-packages``, which is
+put on ``sys.path`` ahead of everything else at startup. Never into the
+system's Python:
+
+* a distribution's ``site-packages`` is not an application's to write to, and
+  on Debian and Ubuntu pip refuses outright (:pep:`668`);
+* in a Flatpak, ``/app`` is read-only, while the user's data folder is not;
+* the Windows build ships its own interpreter and no pip at all.
+
+A folder of our own is the one place writable in all three. The installer
+itself is pip's official zipapp, fetched once on first use — so nothing has to
+be installed before SimuPy can install anything, and the system's Python is
+never touched. Installing needs a network connection.
+
+Declaring them
+--------------
+
+By module name, optionally with the pip name when it differs and a word on what
+it is for::
+
+    serial   → pyserial   talking to an Arduino
+
+The block editor reads your source and offers what it finds — ``import x``,
+``from x import y``, and the module named in ``require("x", "pkg")``, which is
+also where the pip name and the reason come from. It skips the standard library
+and what SimuPy already ships. Treat it as a prompt, not the record: a static
+read cannot see an import assembled at runtime.
+
+.. note::
+
+   A package installed while SimuPy is running is only picked up if nothing has
+   tried to import it yet. Restart after installing if a block still cannot
+   find it.
+
 Icons
 =====
 

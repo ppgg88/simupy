@@ -11,6 +11,7 @@
 #include "io/ModelSerializer.h"
 #include "model/BlockRegistry.h"
 #include "scripting/PythonEngine.h"
+#include "scripting/PythonPackages.h"
 
 #include <cmath>
 #include <set>
@@ -377,7 +378,96 @@ void testWirelessLinkDiagnostics() {
     }
 }
 
+void testDetectedRequirements() {
+    beginTest("A block's imports are read back as requirements");
+
+    const std::vector<PackageRequirement> found = detectRequirements(R"(
+import os, sys, json
+import numpy as np
+import scipy.signal
+from serial.tools import list_ports
+from simupy import Block, require
+
+class B(Block):
+    def setup(self, widths):
+        self.driver = require("serial", "pyserial", "talking to an Arduino")
+        import matplotlib.pyplot
+)");
+
+    std::set<std::string> modules;
+    for (const PackageRequirement& need : found) modules.insert(need.module);
+
+    check(modules.count("scipy") == 1, "an import is found");
+    check(modules.count("matplotlib") == 1, "including one inside a method");
+    check(modules.count("serial") == 1, "and one reached through require()");
+    check(modules.count("os") == 0 && modules.count("json") == 0,
+          "the standard library is not something to install");
+    check(modules.count("numpy") == 0, "nor is what SimuPy already ships");
+    check(modules.count("simupy") == 0, "nor SimuPy itself");
+
+    for (const PackageRequirement& need : found)
+        if (need.module == "serial") {
+            check(need.package == "pyserial",
+                  "require() gives the pip name, which differs from the module");
+            check(need.purpose == "talking to an Arduino",
+                  "and the reason, for whoever is missing it");
+        }
+}
+
+void testLibraryRequirementsRoundTrip() {
+    beginTest("A library remembers the Python it needs");
+
+    CustomLibrary library;
+    library.name = "Needs Things";
+    library.blocks.push_back(makeAffineDefinition());
+    library.requires_ = {{"serial", "pyserial", "talking to an Arduino"},
+                         {"scipy", "", ""}};
+
+    CustomLibrary restored;
+    LibrarySerializer::fromJson(LibrarySerializer::toJson(library), restored);
+
+    check(restored.requires_.size() == 2, "both requirements survive");
+    if (restored.requires_.size() != 2) return;
+    check(restored.requires_[0].module == "serial", "the module name");
+    check(restored.requires_[0].package == "pyserial", "the pip name");
+    check(restored.requires_[0].purpose == "talking to an Arduino",
+          "and the reason");
+    check(restored.requires_[1].installName() == "scipy",
+          "a requirement with no pip name installs under its module name");
+
+    // A library that needs nothing must not grow a field for it.
+    CustomLibrary plain;
+    plain.name = "Plain";
+    plain.blocks.push_back(makeAffineDefinition());
+    check(LibrarySerializer::toJson(plain).find("\"python\"") ==
+              std::string::npos,
+          "and a library needing nothing writes no requirements at all");
+}
+
+void testPackageStatusAndDirectory() {
+    beginTest("Package status reads the interpreter SimuPy actually uses");
+
+    PythonPackages& packages = PythonPackages::instance();
+
+    check(!packages.directory().empty(), "there is a package directory");
+    check(packages.directory().find("simupy") != std::string::npos,
+          "and it belongs to SimuPy, not to the system");
+
+    const PackageStatus numpy = packages.status("numpy");
+    check(numpy.installed, "numpy is seen as installed");
+    check(!numpy.version.empty(), "with a version");
+    check(!numpy.location.empty(), "and a location, so a duplicate is visible");
+
+    const PackageStatus absent =
+        packages.status("definitely_not_installed_anywhere");
+    check(!absent.installed, "and something absent is reported absent");
+    check(absent.version.empty(), "with nothing invented for it");
+}
+
 void runScriptingTests() {
+    runTest(testDetectedRequirements);
+    runTest(testLibraryRequirementsRoundTrip);
+    runTest(testPackageStatusAndDirectory);
     runTest(testCustomBlockMask);
     runTest(testCustomBlockInstancesAreIndependent);
     runTest(testLibraryRoundTrip);

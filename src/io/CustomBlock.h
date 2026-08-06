@@ -1,6 +1,7 @@
 #pragma once
 
 #include "model/Model.h"
+#include "scripting/PythonPackages.h"
 
 #include <memory>
 #include <string>
@@ -64,6 +65,10 @@ public:
     std::string path;
 
     std::vector<CustomBlockDef> blocks;
+
+    /// Python packages the blocks import. Declared by the author so a missing
+    /// one is named before a run reaches the import.
+    std::vector<PackageRequirement> requires_;
 
     CustomBlockDef* find(const std::string& blockName);
     const CustomBlockDef* find(const std::string& blockName) const;

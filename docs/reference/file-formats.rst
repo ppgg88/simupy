@@ -79,6 +79,10 @@ either a diagram or a Python source:
      "version": 1,
      "name": "Control Toolbox",
      "revision": 3,
+     "python": [
+       { "module": "serial", "package": "pyserial",
+         "purpose": "talking to an Arduino" }
+     ],
      "blocks": [
        { "name": "PIAntiWindup", "kind": "subsystem", "category": "Control",
          "icon": { "kind": "text", "text": "PI" },
@@ -99,6 +103,11 @@ either a diagram or a Python source:
 
 ``kind`` is ``subsystem`` or ``python``. Icons are base64 for SVG and raster,
 plain text for a label.
+
+``python`` lists the packages the blocks import, and is absent when they import
+nothing beyond what SimuPy ships. ``package`` is the pip name, given only when
+it differs from the module; ``purpose`` is shown to whoever is missing it. See
+:doc:`../guide/libraries`.
 
 .. note::
 

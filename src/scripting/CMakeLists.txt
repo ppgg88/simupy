@@ -17,6 +17,7 @@ simupy_add_library(simupy-scripting
         PythonEngine.cpp
         PythonBlock.cpp
         PythonModule.cpp
+        PythonPackages.cpp
         ${SIMUPY_API_GENERATED}
     PUBLIC SimuPy::simupy-model pybind11::embed)
 

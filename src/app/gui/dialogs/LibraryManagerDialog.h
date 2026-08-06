@@ -1,5 +1,7 @@
 #pragma once
 
+#include "io/CustomBlock.h"
+
 #include <QDialog>
 
 QT_BEGIN_NAMESPACE
@@ -27,10 +29,13 @@ private slots:
     void removeSelected();
     void editSelected();
     void onSelectionChanged();
+    void installPackages();
 
 private:
     void reload();
     QString selectedLibrary() const;
+    QString packageReport(const CustomLibrary& library) const;
+    std::vector<PackageRequirement> missingPackages(const CustomLibrary& library) const;
     QString selectedBlock() const;
 
     QTreeWidget* tree_ = nullptr;
@@ -38,6 +43,7 @@ private:
     QPushButton* exportButton_ = nullptr;
     QPushButton* removeButton_ = nullptr;
     QPushButton* editButton_ = nullptr;
+    QPushButton* packagesButton_ = nullptr;
 };
 
 }

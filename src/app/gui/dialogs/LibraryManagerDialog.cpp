@@ -17,6 +17,9 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
+#include "scripting/PythonPackages.h"
+#include "scripting/PythonEngine.h"
+#include <QApplication>
 #include <QPushButton>
 #include <QTreeWidget>
 #include <QUrl>
@@ -60,6 +63,10 @@ LibraryManagerDialog::LibraryManagerDialog(QWidget* parent) : QDialog(parent) {
         tr("Write a copy of the library out, to send to someone else."));
     editButton_ = new QPushButton(tr("Edit block…"));
     removeButton_ = new QPushButton(tr("Remove"));
+    packagesButton_ = new QPushButton(tr("Install packages"));
+    packagesButton_->setToolTip(
+        tr("Fetch the Python packages this library needs into SimuPy's own "
+           "folder, leaving the system's Python untouched."));
     auto* folderButton = new QPushButton(tr("Open folder"));
 
     actions->addWidget(importButton);
@@ -68,6 +75,8 @@ LibraryManagerDialog::LibraryManagerDialog(QWidget* parent) : QDialog(parent) {
     actions->addWidget(editButton_);
     actions->addWidget(exportButton_);
     actions->addWidget(removeButton_);
+    actions->addSpacing(12);
+    actions->addWidget(packagesButton_);
     actions->addStretch(1);
     actions->addWidget(folderButton);
 
@@ -97,6 +106,8 @@ LibraryManagerDialog::LibraryManagerDialog(QWidget* parent) : QDialog(parent) {
             &LibraryManagerDialog::onSelectionChanged);
     connect(tree_, &QTreeWidget::itemDoubleClicked, this,
             [this](QTreeWidgetItem*, int) { editSelected(); });
+    connect(packagesButton_, &QPushButton::clicked, this,
+            &LibraryManagerDialog::installPackages);
     connect(folderButton, &QPushButton::clicked, this, [this] {
         const QString directory =
             QString::fromStdString(LibraryManager::instance().userDirectory());
@@ -148,6 +159,87 @@ QString LibraryManagerDialog::selectedBlock() const {
     return item ? item->data(0, kBlockRole).toString() : QString();
 }
 
+std::vector<PackageRequirement> LibraryManagerDialog::missingPackages(
+    const CustomLibrary& library) const {
+    std::vector<PackageRequirement> missing;
+    for (const PackageRequirement& need : library.requires_)
+        if (!PythonPackages::instance().status(need.module).installed)
+            missing.push_back(need);
+    return missing;
+}
+
+QString LibraryManagerDialog::packageReport(const CustomLibrary& library) const {
+    if (library.requires_.empty()) return {};
+
+    QStringList rows;
+    for (const PackageRequirement& need : library.requires_) {
+        const PackageStatus status =
+            PythonPackages::instance().status(need.module);
+
+        QString row = QStringLiteral("<code>%1</code>")
+                          .arg(QString::fromStdString(need.module));
+        if (status.installed) {
+            row += status.version.empty()
+                       ? tr(" — installed")
+                       : tr(" — installed, %1")
+                             .arg(QString::fromStdString(status.version));
+        } else {
+            row += tr(" — <b>missing</b>, pip name <code>%1</code>")
+                       .arg(QString::fromStdString(need.installName()));
+        }
+        if (!need.purpose.empty())
+            row += QStringLiteral(" <i>(%1)</i>")
+                       .arg(QString::fromStdString(need.purpose));
+        rows << row;
+    }
+    return tr("<br><br>Python packages:<br>") + rows.join(QStringLiteral("<br>"));
+}
+
+void LibraryManagerDialog::installPackages() {
+    const QString libraryName = selectedLibrary();
+    CustomLibrary* library =
+        LibraryManager::instance().library(libraryName.toStdString());
+    if (!library) return;
+
+    const std::vector<PackageRequirement> missing = missingPackages(*library);
+    if (missing.empty()) return;
+
+    QStringList names;
+    for (const PackageRequirement& need : missing)
+        names << QString::fromStdString(need.installName());
+
+    const QString where =
+        QString::fromStdString(PythonPackages::instance().directory());
+    if (QMessageBox::question(
+            this, tr("Install Python packages"),
+            tr("Fetch %1 from PyPI into\n\n%2\n\nThe system's Python is not "
+               "touched. This needs a network connection.")
+                .arg(names.join(QStringLiteral(", ")), where),
+            QMessageBox::Ok | QMessageBox::Cancel) != QMessageBox::Ok)
+        return;
+
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    QStringList failures;
+    for (const PackageRequirement& need : missing) {
+        const std::string problem = PythonPackages::instance().install(
+            need.installName(), [](const std::string& text) {
+                PythonEngine::instance().emitOutput(text, false);
+            });
+        if (!problem.empty())
+            failures << QString::fromStdString(problem);
+    }
+    QApplication::restoreOverrideCursor();
+
+    if (failures.isEmpty())
+        QMessageBox::information(this, tr("Install Python packages"),
+                                 tr("Installed: %1").arg(names.join(", ")));
+    else
+        QMessageBox::warning(this, tr("Install Python packages"),
+                             failures.join(QStringLiteral("\n")));
+
+    onSelectionChanged();
+}
+
 void LibraryManagerDialog::onSelectionChanged() {
     const QString libraryName = selectedLibrary();
     const QString blockName = selectedBlock();
@@ -157,6 +249,8 @@ void LibraryManagerDialog::onSelectionChanged() {
     editButton_->setEnabled(!blockName.isEmpty());
     removeButton_->setText(blockName.isEmpty() ? tr("Remove library")
                                                : tr("Remove block"));
+
+    packagesButton_->setEnabled(false);
 
     CustomLibrary* library =
         LibraryManager::instance().library(libraryName.toStdString());
@@ -179,7 +273,9 @@ void LibraryManagerDialog::onSelectionChanged() {
                     QString::fromStdString(library->description);
         text += QStringLiteral("<br><small>%1</small>")
                     .arg(QString::fromStdString(library->path));
+        text += packageReport(*library);
         details_->setText(text);
+        packagesButton_->setEnabled(!missingPackages(*library).empty());
         return;
     }
 
