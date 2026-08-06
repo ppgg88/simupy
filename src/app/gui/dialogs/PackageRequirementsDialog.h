@@ -32,6 +32,7 @@ public:
 
 private:
     void addRow(const PackageRequirement& need);
+    void addBlankRow();
     void detectFromBlocks();
     void removeSelected();
     void refreshStatus();

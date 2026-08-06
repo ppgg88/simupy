@@ -70,7 +70,7 @@ PackageRequirementsDialog::PackageRequirementsDialog(
     connect(detectButton, &QPushButton::clicked, this,
             &PackageRequirementsDialog::detectFromBlocks);
     connect(addButton, &QPushButton::clicked, this,
-            [this] { addRow({}); });
+            &PackageRequirementsDialog::addBlankRow);
     connect(removeButton_, &QPushButton::clicked, this,
             &PackageRequirementsDialog::removeSelected);
     connect(table_, &QTableWidget::itemSelectionChanged, this, [this] {
@@ -97,6 +97,18 @@ void PackageRequirementsDialog::addRow(const PackageRequirement& need) {
     auto* status = new QTableWidgetItem;
     status->setFlags(Qt::ItemIsEnabled);
     table_->setItem(row, kStatus, status);
+}
+
+void PackageRequirementsDialog::addBlankRow() {
+    addRow({});
+
+    // An empty row in an empty table is indistinguishable from nothing having
+    // happened. Put the caret in it so the button visibly did something.
+    const int row = table_->rowCount() - 1;
+    QTableWidgetItem* module = table_->item(row, kModule);
+    table_->setCurrentItem(module);
+    table_->scrollToItem(module);
+    table_->editItem(module);
 }
 
 void PackageRequirementsDialog::removeSelected() {

@@ -46,6 +46,7 @@
 #include <QElapsedTimer>
 #include <QListWidget>
 #include <QSlider>
+#include <QTableWidget>
 #include <QTemporaryDir>
 #include <QToolBar>
 #include <QTest>
@@ -622,6 +623,53 @@ class Driver(Block):
     QApplication::processEvents();
     check(dialog.requirements().size() == before,
           "reading the sources again adds nothing twice");
+}
+
+void testAddingAPackageRowByHand() {
+    beginTest("Add gives a row you can see and type into straight away");
+
+    PackageRequirementsDialog dialog(QStringLiteral("Test"), {}, {});
+    dialog.show();
+    QApplication::processEvents();
+
+    auto* table = dialog.findChild<QTableWidget*>();
+    QPushButton* add = nullptr;
+    for (QPushButton* button : dialog.findChildren<QPushButton*>())
+        if (button->text() == QStringLiteral("Add")) add = button;
+    check(table != nullptr && add != nullptr, "the table and the button exist");
+    if (!table || !add) return;
+
+    check(table->rowCount() == 0, "an empty declaration starts empty");
+
+    add->click();
+    QApplication::processEvents();
+
+    check(table->rowCount() == 1, "the row is added");
+    if (table->rowCount() != 1) return;
+
+    // An empty row in an empty table looks exactly like nothing happening, so
+    // the caret has to land in it or the button reads as broken.
+    check(table->currentRow() == 0, "and is the current row");
+    check(table->currentColumn() == 0, "with the caret in the module column");
+    check(table->findChild<QLineEdit*>() != nullptr,
+          "and an editor already open, so typing just works");
+
+    QTableWidgetItem* module = table->item(0, 0);
+    check(module != nullptr, "the module cell exists");
+    if (!module) return;
+    check(module->flags().testFlag(Qt::ItemIsEditable), "and is editable");
+
+    module->setText(QStringLiteral("scipy"));
+    QApplication::processEvents();
+    const std::vector<PackageRequirement> result = dialog.requirements();
+    check(result.size() == 1 && result[0].module == "scipy",
+          "and what is typed comes back out");
+
+    // A row left blank is not a requirement.
+    add->click();
+    QApplication::processEvents();
+    check(dialog.requirements().size() == 1,
+          "an untouched blank row is not counted");
 }
 
 void testUndoRedoSitOnTheToolbar() {
@@ -2100,6 +2148,7 @@ int main(int argc, char** argv) {
     testDeletingSeveralBlocksDoesNotCrash();
     testUndoRedo();
     testDeclaringPythonPackages();
+    testAddingAPackageRowByHand();
     testUndoRedoSitOnTheToolbar();
     testUndoRestoresDeletionAndGrouping();
     testOpeningSaysWhenAModelCarriesPython(modelPath);
