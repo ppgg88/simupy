@@ -21,7 +21,6 @@ public:
     void updateDiscrete(const EvalContext& c, Eigen::Ref<Vec> xdNext) override;
     void computeZeroCrossings(const EvalContext& c, Eigen::Ref<Vec> zc) override;
     void terminate() override;
-    void reset() override;
 
     bool logsInputs() const override { return logsInputs_; }
 

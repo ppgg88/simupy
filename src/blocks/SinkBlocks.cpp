@@ -90,7 +90,6 @@ public:
         if (stream_.is_open()) stream_.close();
     }
 
-    void reset() override { terminate(); }
 
 private:
     void openStream() {

@@ -144,8 +144,6 @@ public:
 
     virtual void terminate() {}
 
-    virtual void reset() {}
-
 protected:
     std::string id_;
     std::string typeName_;

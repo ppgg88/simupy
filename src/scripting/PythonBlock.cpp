@@ -593,9 +593,6 @@ void PythonBlock::terminate() {
     }
 }
 
-void PythonBlock::reset() {
-    if (PythonEngine::instance().isReady()) impl_->releaseInstance();
-}
 
 void registerPythonBlocks() {
     registerBlockType<PythonBlock>(
