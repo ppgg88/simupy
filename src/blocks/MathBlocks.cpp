@@ -326,44 +326,6 @@ private:
     double upper_ = 0.5, lower_ = -0.5;
 };
 
-class MinMaxBlock : public Block {
-public:
-    PortLayout ports() const override {
-        return {numberedPorts("in", std::max(1, params().integer("inputs", 2))),
-                {"out"}};
-    }
-
-    void setup(BlockSetup& s) override {
-        maximum_ = params().text("operation", "min") == "max";
-        int width = 1;
-        for (int i = 0; i < s.inputCount(); ++i)
-            if (s.inputConnected[i]) width = std::max(width, s.inputWidths[i]);
-        s.outputWidths[0] = width;
-    }
-
-    void computeOutputs(const EvalContext& c) override {
-        Vec& y = c.out(0);
-        if (c.nu == 0) {
-            y.setZero();
-            return;
-        }
-        y = c.in(0).size() == y.size() ? c.in(0)
-                                       : Vec::Constant(y.size(), c.in(0)[0]);
-        for (int i = 1; i < c.nu; ++i) {
-            const Vec& u = c.in(i);
-            const Vec broadcasted =
-                u.size() == y.size() ? u : Vec::Constant(y.size(), u[0]);
-            if (maximum_)
-                y = y.cwiseMax(broadcasted);
-            else
-                y = y.cwiseMin(broadcasted);
-        }
-    }
-
-private:
-    bool maximum_ = false;
-};
-
 /// inheritedWidth() takes the max, so a narrower input would be indexed past.
 void requireBroadcastable(const BlockSetup& s, int width, const char* verb) {
     for (int i = 0; i < s.inputCount(); ++i) {
