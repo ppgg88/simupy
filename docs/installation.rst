@@ -98,6 +98,18 @@ Building
        compiles without Qt.
    * - ``-DSIMUPY_BUILD_TESTS=OFF``
      - Skips the test suite.
+   * - ``-DSIMUPY_ENABLE_ASAN=ON``
+     - Builds with the address and undefined-behaviour sanitizers. Pair it
+       with ``-DCMAKE_BUILD_TYPE=RelWithDebInfo`` and run the suite as CI
+       does::
+
+           $ ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1 \
+               ctest --test-dir build-asan --output-on-failure
+
+       ``detect_leaks=0`` because the embedded interpreter never hands its
+       memory back, and that noise buries everything worth reading. UBSan does
+       not stop the process on a finding, so the CI job greps the log rather
+       than trusting the exit code.
 
 Checking the build
 ------------------

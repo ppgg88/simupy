@@ -18,6 +18,19 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 option(SIMUPY_BUILD_GUI "Build the Qt desktop application" ON)
 option(SIMUPY_BUILD_TESTS "Build the test suite" ON)
+option(SIMUPY_ENABLE_ASAN
+       "Build with the address and undefined-behaviour sanitizers" OFF)
+
+if(SIMUPY_ENABLE_ASAN)
+    if(MSVC)
+        add_compile_options(/fsanitize=address /Zi)
+    else()
+        # -g and a kept frame pointer, or a report names no line worth reading.
+        add_compile_options(-fsanitize=address,undefined
+                            -fno-omit-frame-pointer -g)
+        add_link_options(-fsanitize=address,undefined)
+    endif()
+endif()
 
 include(cmake/SimuPyLibrary.cmake)
 

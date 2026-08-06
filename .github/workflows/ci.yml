@@ -49,6 +49,51 @@ jobs:
           cmake --build build-headless --parallel
           ctest --test-dir build-headless --output-on-failure --timeout 300
 
+  sanitizers:
+    name: Sanitizers
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build \
+            qt6-base-dev qt6-charts-dev qt6-svg-dev libgl1-mesa-dev \
+            libeigen3-dev nlohmann-json3-dev \
+            python3-dev python3-pybind11 python3-numpy
+
+      - name: Configure
+        run: |
+          cmake -S . -B build-asan -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo -DSIMUPY_ENABLE_ASAN=ON
+
+      - name: Build
+        run: cmake --build build-asan --parallel
+
+      # detect_leaks=0: the embedded interpreter never frees. The grep below
+      # is needed because UBSan does not fail the process on a finding.
+      - name: Test
+        env:
+          QT_QPA_PLATFORM: offscreen
+          XDG_RUNTIME_DIR: ${{ runner.temp }}/xdg
+          ASAN_OPTIONS: detect_leaks=0:halt_on_error=0
+          UBSAN_OPTIONS: print_stacktrace=1
+        run: |
+          mkdir -p "$XDG_RUNTIME_DIR"
+          set +e
+          ctest --test-dir build-asan --output-on-failure --timeout 900 \
+            2>&1 | tee sanitizer.log
+          status=${PIPESTATUS[0]}
+          set -e
+
+          if grep -qE "ERROR: AddressSanitizer|runtime error:" sanitizer.log; then
+            echo "::error::the sanitizers reported something; see the log above"
+            exit 1
+          fi
+          exit "$status"
+
   windows:
     name: Build and test (Windows)
     runs-on: windows-2022
