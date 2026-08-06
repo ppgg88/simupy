@@ -102,15 +102,17 @@ For a library: :menuselection:`Library --> Manage Libraries`, select the
 library — the library, not one of its blocks — and the panel below lists its
 packages against the interpreter actually running: installed and at what
 version, or missing and under what pip name.
-:guilabel:`Python packages…` opens the list to edit, and
-:guilabel:`Install packages` lights up when something is missing.
+:guilabel:`Python packages…` opens the list to edit.
 
 For a model: :menuselection:`Simulation --> Python Packages…`. A block written
 straight into a diagram belongs to no library, so its dependency is recorded in
 the |spy| itself and travels with it.
 
 Both open the same editor, with :guilabel:`Detect from blocks` to read the
-list off the sources.
+list off the sources and :guilabel:`Install missing` to fetch whatever the
+Status column reports as absent. Installing is a click rather than automatic:
+it reaches the network and writes to disk, which is not something to do because
+someone typed a module name.
 
 Where they go
 -------------

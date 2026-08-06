@@ -33,6 +33,8 @@ public:
 private:
     void addRow(const PackageRequirement& need);
     void addBlankRow();
+    void installMissing();
+    std::vector<PackageRequirement> missing() const;
     void detectFromBlocks();
     void removeSelected();
     void refreshStatus();
@@ -41,6 +43,7 @@ private:
     QTableWidget* table_ = nullptr;
     QLabel* note_ = nullptr;
     QPushButton* removeButton_ = nullptr;
+    QPushButton* installButton_ = nullptr;
 };
 
 }

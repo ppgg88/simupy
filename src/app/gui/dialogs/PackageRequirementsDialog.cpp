@@ -1,6 +1,8 @@
 #include "PackageRequirementsDialog.h"
 
 #include "scripting/PythonPackages.h"
+#include <QApplication>
+#include "scripting/PythonEngine.h"
 
 #include <QDialogButtonBox>
 #include <QHBoxLayout>
@@ -49,12 +51,17 @@ PackageRequirementsDialog::PackageRequirementsDialog(
         tr("Read the Python sources and add what they import."));
     auto* addButton = new QPushButton(tr("Add"), this);
     removeButton_ = new QPushButton(tr("Remove"), this);
+    installButton_ = new QPushButton(tr("Install missing"), this);
+    installButton_->setToolTip(
+        tr("Fetch what is missing into SimuPy's own folder. Needs a network "
+           "connection; the system's Python is not touched."));
 
     auto* actions = new QHBoxLayout;
     actions->addWidget(detectButton);
     actions->addWidget(addButton);
     actions->addWidget(removeButton_);
     actions->addStretch(1);
+    actions->addWidget(installButton_);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok |
                                          QDialogButtonBox::Cancel);
@@ -73,6 +80,8 @@ PackageRequirementsDialog::PackageRequirementsDialog(
             &PackageRequirementsDialog::addBlankRow);
     connect(removeButton_, &QPushButton::clicked, this,
             &PackageRequirementsDialog::removeSelected);
+    connect(installButton_, &QPushButton::clicked, this,
+            &PackageRequirementsDialog::installMissing);
     connect(table_, &QTableWidget::itemSelectionChanged, this, [this] {
         removeButton_->setEnabled(!table_->selectedItems().isEmpty());
     });
@@ -116,6 +125,10 @@ void PackageRequirementsDialog::removeSelected() {
     for (const QTableWidgetItem* item : table_->selectedItems())
         rows.insert(item->row());
     for (int row : rows) table_->removeRow(row);
+
+    // removeRow emits nothing itemChanged listens to, so the button would keep
+    // offering to install a row that is no longer there.
+    refreshStatus();
 }
 
 void PackageRequirementsDialog::detectFromBlocks() {
@@ -142,6 +155,7 @@ void PackageRequirementsDialog::detectFromBlocks() {
 }
 
 void PackageRequirementsDialog::refreshStatus() {
+    bool anyMissing = false;
     for (int row = 0; row < table_->rowCount(); ++row) {
         QTableWidgetItem* cell = table_->item(row, kStatus);
         QTableWidgetItem* module = table_->item(row, kModule);
@@ -154,6 +168,7 @@ void PackageRequirementsDialog::refreshStatus() {
         }
 
         const PackageStatus status = PythonPackages::instance().status(name);
+        if (!status.installed) anyMissing = true;
         cell->setText(status.installed
                           ? (status.version.empty()
                                  ? tr("installed")
@@ -162,18 +177,65 @@ void PackageRequirementsDialog::refreshStatus() {
                                            status.version)))
                           : tr("missing"));
     }
+
+    if (installButton_) installButton_->setEnabled(anyMissing);
+}
+
+std::vector<PackageRequirement> PackageRequirementsDialog::missing() const {
+    std::vector<PackageRequirement> result;
+    for (const PackageRequirement& need : requirements())
+        if (!PythonPackages::instance().status(need.module).installed)
+            result.push_back(need);
+    return result;
+}
+
+void PackageRequirementsDialog::installMissing() {
+    const std::vector<PackageRequirement> wanted = missing();
+    if (wanted.empty()) return;
+
+    installButton_->setEnabled(false);
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+
+    QStringList failures;
+    for (const PackageRequirement& need : wanted) {
+        note_->setText(tr("Installing %1…")
+                           .arg(QString::fromStdString(need.installName())));
+        // pip runs in this thread, so the label needs painting before it does.
+        QApplication::processEvents();
+
+        const std::string problem = PythonPackages::instance().install(
+            need.installName(), [](const std::string& text) {
+                PythonEngine::instance().emitOutput(text, false);
+            });
+        if (!problem.empty()) failures << QString::fromStdString(problem);
+    }
+
+    QApplication::restoreOverrideCursor();
+    refreshStatus();
+
+    note_->setText(failures.isEmpty()
+                       ? tr("Installed into %1. A package already imported in "
+                            "this session is only picked up after a restart.")
+                             .arg(QString::fromStdString(
+                                 PythonPackages::instance().directory()))
+                       : failures.join(QStringLiteral(" — ")));
 }
 
 std::vector<PackageRequirement> PackageRequirementsDialog::requirements() const {
+    // Reachable from itemChanged while addRow is still filling a row in, so
+    // every cell has to be treated as possibly not there yet.
+    const auto text = [this](int row, int column) {
+        const QTableWidgetItem* cell = table_->item(row, column);
+        return cell ? cell->text().trimmed().toStdString() : std::string();
+    };
+
     std::vector<PackageRequirement> result;
     for (int row = 0; row < table_->rowCount(); ++row) {
         PackageRequirement need;
-        need.module = table_->item(row, kModule)->text().trimmed().toStdString();
+        need.module = text(row, kModule);
         if (need.module.empty()) continue;
-        need.package =
-            table_->item(row, kPackage)->text().trimmed().toStdString();
-        need.purpose =
-            table_->item(row, kPurpose)->text().trimmed().toStdString();
+        need.package = text(row, kPackage);
+        need.purpose = text(row, kPurpose);
         result.push_back(std::move(need));
     }
     return result;

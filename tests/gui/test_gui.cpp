@@ -672,6 +672,48 @@ void testAddingAPackageRowByHand() {
           "an untouched blank row is not counted");
 }
 
+void testInstallButtonFollowsWhatIsMissing() {
+    beginTest("Install missing sits with the status, and follows it");
+
+    // Building this used to crash: itemChanged fires while addRow is still
+    // laying out a row, and the handler read cells that did not exist yet.
+    PackageRequirementsDialog dialog(
+        QStringLiteral("Test"),
+        {{"numpy", "", "arrays"},
+         {"definitely_not_installed_anywhere", "nope", "nothing"}},
+        {});
+    dialog.show();
+    QApplication::processEvents();
+
+    auto* table = dialog.findChild<QTableWidget*>();
+    QPushButton* install = nullptr;
+    for (QPushButton* button : dialog.findChildren<QPushButton*>())
+        if (button->text().contains(QStringLiteral("Install"))) install = button;
+
+    check(install != nullptr,
+          "the install action is in the editor, where the status is shown");
+    if (!install || !table) return;
+
+    check(table->rowCount() == 2, "both requirements are listed");
+    check(install->isEnabled(), "and the button is live while one is missing");
+
+    check(table->item(0, 3)->text().contains(QStringLiteral("installed")),
+          "a present package reads as installed");
+    check(table->item(1, 3)->text() == QStringLiteral("missing"),
+          "and an absent one as missing");
+
+    // Nothing missing: nothing to do.
+    table->selectRow(1);
+    QApplication::processEvents();
+    for (QPushButton* button : dialog.findChildren<QPushButton*>())
+        if (button->text() == QStringLiteral("Remove")) button->click();
+    QApplication::processEvents();
+
+    check(dialog.requirements().size() == 1, "the missing row is gone");
+    check(!install->isEnabled(),
+          "and with nothing missing the button goes quiet");
+}
+
 void testUndoRedoSitOnTheToolbar() {
     beginTest("Undo and redo have buttons, not just a shortcut");
 
@@ -2149,6 +2191,7 @@ int main(int argc, char** argv) {
     testUndoRedo();
     testDeclaringPythonPackages();
     testAddingAPackageRowByHand();
+    testInstallButtonFollowsWhatIsMissing();
     testUndoRedoSitOnTheToolbar();
     testUndoRestoresDeletionAndGrouping();
     testOpeningSaysWhenAModelCarriesPython(modelPath);
