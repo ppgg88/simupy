@@ -25,7 +25,10 @@ Zero-crossing detection needs the block to declare it
 
 Two events inside one step are found one at a time
    The step lands on the earliest crossing and the next step finds the rest,
-   which is right but can be slow if a model chatters between two surfaces.
+   which is right but can be slow if a model chatters between two surfaces. A
+   model whose crossings collapse onto each other while the clock stands still
+   is stopped and named rather than left to crawl, but the cure is yours: give
+   the comparison some hysteresis, or a dead band.
 
 SDIRK2 is only second order
    It earns its keep on stiff models; on a well-conditioned one at a tight
@@ -41,10 +44,7 @@ Modelling
 
 Subsystems are virtual
    They organise a diagram but do not create a scope of their own: there is no
-   enabled or triggered execution, and no atomic-subsystem semantics. There is
-   also no "group the selection into a subsystem" command — build one by
-   dropping a Subsystem block and filling it in, which is also how you start a
-   block worth saving.
+   enabled or triggered execution, and no atomic-subsystem semantics.
 
 Mask expressions overwrite the typed value
    Opening a library block and editing a bound parameter by hand does nothing:
