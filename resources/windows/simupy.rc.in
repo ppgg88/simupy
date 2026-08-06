@@ -1,0 +1,9 @@
+// The executable's own icon: Explorer, the taskbar and the Start menu read it
+// straight out of the binary, and Qt takes the window icon from it too.
+// Windows has no icon theme to look the SVG up in.
+//
+// Numbered 1 because the shell shows the lowest-numbered icon resource.
+// The path is absolute because rc.exe and windres disagree on what a relative
+// one is relative to. Forward slashes: both accept them, and a backslash would
+// need escaping.
+1 ICON "@SIMUPY_ICO_PATH@"

@@ -32,6 +32,10 @@ if(SIMUPY_ENABLE_ASAN)
     endif()
 endif()
 
+# Named here rather than in Packaging.cmake: the GUI needs it too, and that
+# file is included last.
+set(SIMUPY_APP_ID "io.github.ppgg88.SimuPy")
+
 include(cmake/SimuPyLibrary.cmake)
 
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)

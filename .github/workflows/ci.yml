@@ -258,6 +258,9 @@ jobs:
           cd ..
           git diff --exit-code -- examples libraries
 
+      - name: Icons match the SVG they are rendered from
+        run: python tools/make_icons.py --check
+
       - name: Desktop and AppStream metadata
         run: |
           sudo apt-get update

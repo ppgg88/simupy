@@ -62,3 +62,19 @@ target_compile_options(simupy-gui PRIVATE
 qt_add_executable(simupy main.cpp)
 target_link_libraries(simupy PRIVATE SimuPy::simupy-gui)
 set_target_properties(simupy PROPERTIES WIN32_EXECUTABLE ON MACOSX_BUNDLE ON)
+
+# QIcon::fromTheme only ever finds anything on a freedesktop desktop, so the
+# window icon is carried in the binary for every other platform.
+set(SIMUPY_APP_PNG
+    ${PROJECT_SOURCE_DIR}/resources/icons/${SIMUPY_APP_ID}-256.png)
+set_source_files_properties(${SIMUPY_APP_PNG}
+                            PROPERTIES QT_RESOURCE_ALIAS appicon.png)
+qt_add_resources(simupy "appicon" PREFIX "/" FILES ${SIMUPY_APP_PNG})
+
+# The shell reads the executable icon out of the binary itself.
+if(WIN32)
+    set(SIMUPY_ICO_PATH ${PROJECT_SOURCE_DIR}/resources/icons/${SIMUPY_APP_ID}.ico)
+    configure_file(${PROJECT_SOURCE_DIR}/resources/windows/simupy.rc.in
+                   ${CMAKE_CURRENT_BINARY_DIR}/simupy.rc @ONLY)
+    target_sources(simupy PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/simupy.rc)
+endif()

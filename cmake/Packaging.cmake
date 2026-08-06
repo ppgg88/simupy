@@ -35,7 +35,6 @@ install(FILES ${PROJECT_SOURCE_DIR}/README.md ${PROJECT_SOURCE_DIR}/LICENSE
         COMPONENT runtime)
 
 # Flatpak refuses to export a file not named after the application ID.
-set(SIMUPY_APP_ID "io.github.ppgg88.SimuPy")
 
 if(UNIX AND NOT APPLE AND SIMUPY_BUILD_GUI)
     install(FILES ${PROJECT_SOURCE_DIR}/packaging/${SIMUPY_APP_ID}.desktop
@@ -232,8 +231,17 @@ if(WIN32)
     set(CPACK_NSIS_DISPLAY_NAME "SimuPy ${SIMUPY_VERSION}")
     set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
     set(CPACK_NSIS_MODIFY_PATH ON)
+    # NSIS wants a native path, and the same icon in three places: the
+    # installer and uninstaller windows, and the Add/Remove Programs entry.
+    file(TO_NATIVE_PATH
+         "${PROJECT_SOURCE_DIR}/resources/icons/io.github.ppgg88.SimuPy.ico"
+         SIMUPY_NSIS_ICON)
+    set(CPACK_NSIS_MUI_ICON "${SIMUPY_NSIS_ICON}")
+    set(CPACK_NSIS_MUI_UNIICON "${SIMUPY_NSIS_ICON}")
+
     if(SIMUPY_BUILD_GUI)
         set(CPACK_NSIS_MENU_LINKS "bin/simupy.exe" "SimuPy")
+        set(CPACK_NSIS_INSTALLED_ICON_NAME "bin\\\\simupy.exe")
     endif()
 else()
     set(CPACK_GENERATOR "TGZ;DEB")

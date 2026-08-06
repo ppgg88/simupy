@@ -21,8 +21,11 @@ int main(int argc, char** argv) {
 
     // Ties the window to its desktop entry under Wayland and inside Flatpak.
     QApplication::setDesktopFileName(QStringLiteral("io.github.ppgg88.SimuPy"));
+    // An icon theme is a freedesktop idea: fromTheme finds nothing on Windows
+    // or macOS, so it falls back to the raster copy built into the binary.
     QApplication::setWindowIcon(
-        QIcon::fromTheme(QStringLiteral("io.github.ppgg88.SimuPy")));
+        QIcon::fromTheme(QStringLiteral("io.github.ppgg88.SimuPy"),
+                         QIcon(QStringLiteral(":/appicon.png"))));
 
     QCommandLineParser parser;
     parser.setApplicationDescription(
